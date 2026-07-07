@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 분석 결과/샘플 산출물
+sample_data/*_result.xlsx
+sample_data/result.xlsx
+sample_data/gui_result.xlsx
+
+# 오프라인 배포용 wheel 캐시
+wheels/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
