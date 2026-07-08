@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 기반 데이터 이상치 탐지 프로그램</title>
+<title>데이터 이상치 탐지 프로그램</title>
 <style>
   :root{
     --bg:#f4f6f9; --panel:#ffffff; --line:#dfe3e8; --text:#1f2933;
@@ -49,7 +49,7 @@
   .grid-opts{display:grid; grid-template-columns:repeat(3,1fr); gap:8px 16px;}
   .grid-opts label{display:flex; align-items:center; gap:6px; cursor:pointer;}
   .params{display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px;}
-  .params2{display:grid; grid-template-columns:repeat(3,1fr); gap:10px 24px;}
+  .params2{display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px;}
   .param{display:flex; align-items:center; justify-content:space-between; gap:10px;}
   .param label{color:var(--muted);}
   .param input{width:120px;}
@@ -63,6 +63,7 @@
   .progress-outer{background:#e4e9f2; border-radius:20px; height:16px; overflow:hidden;}
   .progress-inner{background:var(--accent); height:100%; width:0%; transition:width .2s;}
   #status{margin-top:8px; font-size:13px; color:var(--muted); text-align:center;}
+  #cmpStatus{margin-top:8px; font-size:13px; color:var(--muted); text-align:center;}
   .summary{display:flex; gap:24px; flex-wrap:wrap; margin-bottom:10px;}
   .summary .stat{background:#eef2f7; border-radius:8px; padding:10px 16px;}
   .summary .stat b{font-size:20px; display:block;}
@@ -170,9 +171,15 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>데이터 이상치 탐지 프로그램</h1>
-  <p>오프라인(로컬) 환경 · HTML 파일 · JS 기반</p>
+<header style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <h1>데이터 이상치 탐지 프로그램</h1>
+    <p>오프라인(로컬) 환경 · HTML 파일 · JS 기반</p>
+  </div>
+  <div style="font-size:20px; text-align:right;">
+    <p>한국산업단지공단 33기</p>
+    <h1>3조</h1>
+  </div>
 </header>
 
 <div class="wrap">
@@ -368,9 +375,8 @@
         <label><input type="checkbox" id="opt_cmp_iqr" checked> IQR 기반 변화량</label>
       </div>
       <div class="params2" style="margin-top:12px;">
-        <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1"></div>
-        <div class="param"><label>변화 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1"></div>
-        <div class="param"><label>IQR 기준 변화율 (%)</label><input type="number" id="p_cmp_z_dummy" value="" step="0.1" min="0.1" disabled></div>
+        <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1" style="align-items:center margin-right:10px"></div>
+        <div class="param"><label>변화 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1" style="align-items:center margin-right:10px"></div>
       </div>
     </div>
 
