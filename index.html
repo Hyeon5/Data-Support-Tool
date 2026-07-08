@@ -65,19 +65,24 @@
   .summary{display:flex; gap:24px; flex-wrap:wrap; margin-bottom:10px;}
   .summary .stat{background:#eef2f7; border-radius:8px; padding:10px 16px;}
   .summary .stat b{font-size:20px; display:block;}
-  .hidden{display:none;}
+  .hidden{display:none !important;}
   .filecue{color:var(--muted); font-style:italic;}
   .note{font-size:12px; color:var(--muted); margin-top:6px;}
   .runbar{position:sticky; bottom:0; background:var(--panel); border-top:1px solid var(--line);
     padding:14px 18px; border-radius:0 0 10px 10px;}
-  /* 도움말 툴팁: 옵션명 텍스트 자체가 hover 대상 */
-  .has-tooltip{
-    border-bottom:1px dotted #97a9bf; cursor:help;
-    transition:color .12s, border-color .12s;
+  /* 도움말 툴팁: 옵션명 오른쪽의 아주 연한 회색 i 아이콘에 hover */
+  .info-icon{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:14px; height:14px; margin-left:4px; padding:0; flex:0 0 auto;
+    border:1px solid #e6eaef; border-radius:50%; background:transparent;
+    color:#ccd3dc; font-size:10px; font-style:italic; font-weight:700;
+    font-family:Georgia,"Times New Roman",serif; line-height:1;
+    cursor:help; vertical-align:middle;
   }
-  .has-tooltip:hover, .has-tooltip:focus-visible{
-    color:var(--accent); border-bottom-color:var(--accent); outline:none;
+  .info-icon:hover, .info-icon:focus-visible{
+    color:var(--accent); border-color:var(--accent); outline:none;
   }
+  .param label{ display:inline-flex; align-items:center; }
   .info-tooltip{
     position:absolute; z-index:1000; max-width:340px; max-height:72vh; overflow-y:auto;
     background:#1f2933; color:#e7edf3; border-radius:8px; padding:11px 13px;
@@ -2288,8 +2293,6 @@ const InfoTooltip = (function () {
     ["beginner", "초보자 추천"], ["practical", "실무 권장"], ["caution", "주의사항"],
   ];
   let tip = null, mode = null, anchor = null, timer = null;
-  // 터치 전용 기기(hover 불가) 판별 — 클릭 시점에 평가한다.
-  const isTouchOnly = () => window.matchMedia && window.matchMedia("(hover: none)").matches;
 
 function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
@@ -2336,56 +2339,47 @@ function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").
   }
   function scheduleHide() { clearTimeout(timer); timer = setTimeout(hide, 140); }
 
-  /** 요소를 툴팁 대상으로 만든다(hover/키보드 focus/모바일 터치). 재사용 가능. */
-  function attach(el, key) {
+  /** key 에 매핑된 연한 회색 i 아이콘 버튼을 생성한다(재사용 가능).
+   *  hover/키보드 focus 로 표시, 클릭·터치는 고정 토글(체크박스에 영향 없음). */
+  function createIcon(key) {
     const info = TOOLTIP_INFO[key];
-    el.classList.add("has-tooltip");
-    el.setAttribute("tabindex", "0");
-    el.setAttribute("aria-label", (info ? info.title : key) + " 도움말");
-    el.addEventListener("mouseenter", () => { if (mode !== "pinned") show(el, key, "hover"); });
-    el.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
-    el.addEventListener("focus", () => { if (mode !== "pinned") show(el, key, "hover"); });
-    el.addEventListener("blur", () => { if (mode === "hover") hide(); });
-    // 모바일(터치 전용 기기): 탭하면 툴팁을 고정 토글한다.
-    // PC 에서는 hover 로 이미 표시되므로 클릭의 원래 동작(체크박스 토글 등)을 방해하지 않는다.
-    el.addEventListener("click", (e) => {
-      if (!isTouchOnly()) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "info-icon"; b.textContent = "i";
+    b.setAttribute("aria-label", (info ? info.title : key) + " 도움말");
+    b.addEventListener("mouseenter", () => { if (mode !== "pinned") show(b, key, "hover"); });
+    b.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
+    b.addEventListener("focus", () => { if (mode !== "pinned") show(b, key, "hover"); });
+    b.addEventListener("blur", () => { if (mode === "hover") hide(); });
+    b.addEventListener("click", (e) => {
       e.preventDefault(); e.stopPropagation();
-      if (mode === "pinned" && anchor === el) hide();
-      else show(el, key, "pinned");
+      if (mode === "pinned" && anchor === b) hide();
+      else show(b, key, "pinned");
     });
+    return b;
   }
 
-  /** 화면 내 옵션/파라미터 요소를 찾아 옵션명 텍스트에 툴팁을 자동 연결한다. */
+  /** 화면 내 옵션/파라미터 요소를 찾아 옵션명 오른쪽에 i 아이콘을 자동 부착한다. */
   function init() {
-    // 체크박스 옵션: 라벨의 텍스트 부분만 span 으로 감싸 툴팁 대상으로 만든다.
     document.querySelectorAll(".grid-opts label").forEach((label) => {
       const input = label.querySelector("input");
       if (!input || !TOOLTIP_INFO[input.id]) return;
-      const span = document.createElement("span");
-      const nodes = [];
-      for (let n = input.nextSibling; n; n = n.nextSibling) nodes.push(n);
-      nodes.forEach((nd) => span.appendChild(nd));
-      span.textContent = span.textContent.trim();
-      label.appendChild(span);
-      attach(span, input.id);
+      label.appendChild(createIcon(input.id));
     });
-    // 수치 파라미터: 라벨 텍스트 자체를 툴팁 대상으로 만든다.
     document.querySelectorAll(".param").forEach((p) => {
       const input = p.querySelector("input");
       const label = p.querySelector("label");
       if (!input || !label || !TOOLTIP_INFO[input.id]) return;
-      attach(label, input.id);
+      label.appendChild(createIcon(input.id));
     });
     // 바깥 클릭/ESC 로 닫기(고정된 툴팁 포함)
     document.addEventListener("click", (e) => {
-      if (mode === "pinned" && !e.target.closest(".has-tooltip") && !e.target.closest(".info-tooltip")) hide();
+      if (mode === "pinned" && !e.target.closest(".info-icon") && !e.target.closest(".info-tooltip")) hide();
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
     window.addEventListener("resize", hide);
     window.addEventListener("scroll", () => { if (anchor) place(anchor); }, true);
   }
-  return { init, attach };
+  return { init, createIcon };
 })();
 
 InfoTooltip.init();
