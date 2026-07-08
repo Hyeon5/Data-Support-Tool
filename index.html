@@ -252,6 +252,7 @@
   <div class="panel hidden" id="resultPanel">
     <h2>분석 결과</h2>
     <div class="summary" id="summary"></div>
+    <div id="skipNote" class="dz-error hidden" role="alert"></div>
     <div class="row" style="margin-bottom:10px;">
       <button id="btnDownload">결과 다운로드 (Excel)</button>
       <label style="display:flex;align-items:center;gap:6px;" class="muted">
@@ -352,6 +353,9 @@
           </select>
         </label>
       </div>
+      <div class="row" style="margin-bottom:10px;">
+        <button id="btnCmpDownload">비교 결과 다운로드 (Excel)</button>
+      </div>
       <div class="tbl-scroll">
         <table id="cmpTable"><thead></thead><tbody></tbody></table>
       </div>
@@ -374,6 +378,446 @@
   </p>
 </div>
 
+<script id="engineScript">
+"use strict";
+/* =====================================================================
+ * 분석 엔진 (순수 계산 코드)
+ *
+ * 이 스크립트 블록은 DOM 을 사용하지 않으며, 메인 화면과 Web Worker
+ * 양쪽에서 동일하게 실행된다. 분석(runAnalysis)은 워커에서 수행되어
+ * 대용량 데이터에서도 화면이 멈추지 않는다. Worker 생성이 불가능한
+ * 환경에서는 메인 스레드에서 그대로 실행된다(폴백).
+ * ===================================================================== */
+/* =====================================================================
+ * 2. 값 헬퍼 (결측 판별, 숫자/날짜 변환, 포맷)
+ * ===================================================================== */
+const Values = (function () {
+  const DATE_FORMATS_RE = [
+    /^\d{4}-\d{1,2}-\d{1,2}$/, /^\d{4}\/\d{1,2}\/\d{1,2}$/, /^\d{4}\.\d{1,2}\.\d{1,2}$/,
+    /^\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(:\d{2})?$/
+  ];
+  function isMissing(v) {
+    if (v === null || v === undefined) return true;
+    if (typeof v === "number" && Number.isNaN(v)) return true;
+    if (typeof v === "string" && v.trim() === "") return true;
+    return false;
+  }
+  function toNumber(v) {
+    if (typeof v === "boolean") return null;
+    if (typeof v === "number") return Number.isNaN(v) ? null : v;
+    if (v instanceof Date) return null;
+    if (typeof v === "string") {
+      const t = v.trim().replace(/,/g, "");
+      if (t === "") return null;
+      // 순수 숫자 형태만 허용 (지수 포함)
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return null;
+      const n = Number(t);
+      return Number.isNaN(n) ? null : n;
+    }
+    return null;
+  }
+  function toDate(v) {
+    if (v instanceof Date) return v;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t === "") return null;
+      if (!DATE_FORMATS_RE.some(re => re.test(t))) return null;
+      const d = new Date(t.replace(/\./g, "-").replace(/\//g, "-"));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+  function fmtDate(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    const base = d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+    if (d.getUTCHours() || d.getUTCMinutes() || d.getUTCSeconds())
+      return base + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
+    return base;
+  }
+  function cellText(v) {
+    if (isMissing(v)) return "";
+    if (v instanceof Date) return fmtDate(v);
+    return String(v);
+  }
+  /** 사유 문자열용 숫자 포맷: 정수는 소수점 제거, 소수는 뒤쪽 0 제거. */
+  function fmtNum(x) {
+    const n = Number(x);
+    if (!isFinite(n)) return String(x);
+    if (Number.isInteger(n)) return String(n);
+    return n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  }
+  return { isMissing, toNumber, toDate, cellText, fmtNum };
+})();
+
+/* =====================================================================
+ * 4. 컬럼 타입 자동 분석
+ * ===================================================================== */
+const ColumnAnalyzer = (function () {
+  const RATIO = 0.8;
+  function detectType(values) {
+    const nonMissing = values.filter(v => !Values.isMissing(v));
+    if (!nonMissing.length) return "String";
+    let num = 0, date = 0;
+    for (const v of nonMissing) {
+      if (typeof v === "number") num++;
+      else if (v instanceof Date) date++;
+      else if (Values.toNumber(v) !== null) num++;
+      else if (Values.toDate(v) !== null) date++;
+    }
+    const total = nonMissing.length;
+    if (num / total >= RATIO) return "Number";
+    if (date / total >= RATIO) return "Date";
+    return "String";
+  }
+  function analyze(table) {
+    return table.columns.map((name, idx) => ({
+      name, type: detectType(table.rows.map(r => r[idx]))
+    }));
+  }
+  function numericColumns(infos) { return infos.filter(i => i.type === "Number").map(i => i.name); }
+  function buildNumericConfigs(table, infos) {
+    const configs = [];
+    for (const info of infos) {
+      if (info.type !== "Number") continue;
+      const idx = table.columns.indexOf(info.name);
+      const nums = table.rows.map(r => Values.toNumber(r[idx])).filter(n => n !== null);
+      const min = nums.length ? Math.min(...nums) : 0;
+      const max = nums.length ? Math.max(...nums) : 0;
+      configs.push({ name: info.name, actualMin: min, actualMax: max, allowMin: min, allowMax: max, use: true });
+    }
+    return configs;
+  }
+  return { analyze, numericColumns, buildNumericConfigs };
+})();
+
+/* =====================================================================
+ * 5. 이상치 탐지 알고리즘 (공통 인터페이스: detect(ctx) -> [{row, reason}])
+ *    ctx = { table, numericColumns, numericFrame(col->number[]|null), config }
+ * ===================================================================== */
+const Detectors = (function () {
+  const F = Values.fmtNum;
+
+  // ① 결측치
+  function missing(ctx) {
+    const out = [];
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      const cols = [];
+      ctx.table.columns.forEach((c, i) => { if (Values.isMissing(ctx.table.rows[r][i])) cols.push(c); });
+      if (cols.length) out.push({ row: r, reason: "결측치 [" + cols.join(", ") + "]" });
+    }
+    return out;
+  }
+
+  // ② 중복 데이터 (모든 컬럼 값이 동일한 행)
+  function duplicate(ctx) {
+    const seen = new Map(); const groups = new Map();
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      // 구분자: 데이터에 나타날 수 없는 제어문자(U+0001). 반드시 이스케이프 표기로 유지할 것.
+      const key = ctx.table.rows[r].map(Values.cellText).join("\u0001");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    }
+    const out = [];
+    for (const rowsIdx of groups.values())
+      if (rowsIdx.length > 1) rowsIdx.forEach(r => out.push({ row: r, reason: "중복 데이터" }));
+    return out;
+  }
+
+  // ③ 범위 검사
+  function range(ctx) {
+    const out = [];
+    for (const cfg of ctx.config.numericConfigs) {
+      if (!cfg.use) continue;
+      const col = ctx.numericFrame[cfg.name]; if (!col) continue;
+      for (let r = 0; r < col.length; r++) {
+        const v = col[r]; if (v === null) continue;
+        if (v < cfg.allowMin || v > cfg.allowMax)
+          out.push({ row: r, reason: "범위 초과 [" + cfg.name + "] (허용:" + F(cfg.allowMin) + "~" + F(cfg.allowMax) + ", 실제:" + F(v) + ")" });
+      }
+    }
+    return out;
+  }
+
+  // ④ 증감률 검사 (이전 행 대비)
+  function changeRate(ctx) {
+    const out = []; const th = ctx.config.changeRateThreshold;
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name]; let prev = null;
+      for (let r = 0; r < col.length; r++) {
+        const cur = col[r];
+        if (cur === null) { prev = null; continue; }
+        if (prev !== null && prev !== 0) {
+          const ch = (cur - prev) / Math.abs(prev) * 100;
+          if (Math.abs(ch) > th) out.push({ row: r, reason: "증감률 이상 [" + name + "] (" + (ch >= 0 ? "+" : "-") + F(Math.abs(ch)) + "%)" });
+        }
+        prev = cur;
+      }
+    }
+    return out;
+  }
+
+  // ⑤ IQR
+  function iqr(ctx) {
+    const out = [];
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name];
+      const vals = col.filter(v => v !== null).sort((a, b) => a - b);
+      if (vals.length < 4) continue;
+      const q = (p) => { const pos = (vals.length - 1) * p; const lo = Math.floor(pos), hi = Math.ceil(pos); return vals[lo] + (vals[hi] - vals[lo]) * (pos - lo); };
+      const q1 = q(0.25), q3 = q(0.75), iqrv = q3 - q1;
+      if (iqrv === 0) continue;
+      const lower = q1 - 1.5 * iqrv, upper = q3 + 1.5 * iqrv;
+      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; if (v < lower || v > upper) out.push({ row: r, reason: "IQR 이상 [" + name + "]" }); }
+    }
+    return out;
+  }
+
+  // ⑥ Z-Score
+  function zscore(ctx) {
+    const out = []; const th = ctx.config.zscoreThreshold;
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name];
+      const vals = col.filter(v => v !== null);
+      if (vals.length < 2) continue;
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length);
+      if (std === 0) continue;
+      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; const z = (v - mean) / std; if (Math.abs(z) > th) out.push({ row: r, reason: "Z-Score 이상 [" + name + "] (Z=" + F(Math.round(Math.abs(z) * 100) / 100) + ")" }); }
+    }
+    return out;
+  }
+
+  // --- 머신러닝 공통: 특징 행렬(표준화 옵션) ---
+  function featureMatrix(ctx, standardize) {
+    const cols = ctx.numericColumns;
+    if (!cols.length) return { X: [], pos: [] };
+    const X = [], pos = [];
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      const row = []; let ok = true;
+      for (const c of cols) { const v = ctx.numericFrame[c][r]; if (v === null) { ok = false; break; } row.push(v); }
+      if (ok) { X.push(row); pos.push(r); }
+    }
+    if (standardize && X.length) {
+      for (let j = 0; j < cols.length; j++) {
+        let m = 0; for (const row of X) m += row[j]; m /= X.length;
+        let s = 0; for (const row of X) s += (row[j] - m) * (row[j] - m); s = Math.sqrt(s / X.length) || 1;
+        for (const row of X) row[j] = (row[j] - m) / s;
+      }
+    }
+    return { X, pos };
+  }
+  function dist(a, b) { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
+
+  // 재현성 있는 난수 (mulberry32)
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // ⑦ Isolation Forest
+  function isolationForest(ctx) {
+    const { X, pos } = featureMatrix(ctx, false);
+    const n = X.length, dim = X.length ? X[0].length : 0;
+    if (n < 2 || dim === 0) return [];
+    const rand = rng(42);
+    const nTrees = 100, psi = Math.min(256, n);
+    const heightLimit = Math.ceil(Math.log2(psi));
+    const c = (m) => m > 2 ? 2 * (Math.log(m - 1) + 0.5772156649) - 2 * (m - 1) / m : (m === 2 ? 1 : 0);
+
+    function buildTree(idxs, depth) {
+      if (depth >= heightLimit || idxs.length <= 1) return { size: idxs.length, ext: true };
+      const q = Math.floor(rand() * dim);
+      let mn = Infinity, mx = -Infinity;
+      for (const i of idxs) { const v = X[i][q]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      if (mn === mx) return { size: idxs.length, ext: true };
+      const p = mn + rand() * (mx - mn);
+      const left = [], right = [];
+      for (const i of idxs) (X[i][q] < p ? left : right).push(i);
+      return { ext: false, q, p, left: buildTree(left, depth + 1), right: buildTree(right, depth + 1) };
+    }
+    function pathLen(x, node, depth) {
+      if (node.ext) return depth + c(node.size);
+      return x[node.q] < node.p ? pathLen(x, node.left, depth + 1) : pathLen(x, node.right, depth + 1);
+    }
+    const trees = [];
+    for (let t = 0; t < nTrees; t++) {
+      const sample = [];
+      for (let k = 0; k < psi; k++) sample.push(Math.floor(rand() * n));
+      trees.push(buildTree(sample, 0));
+    }
+    const cPsi = c(psi) || 1;
+    const scores = X.map(x => { let sum = 0; for (const tr of trees) sum += pathLen(x, tr, 0); return Math.pow(2, -(sum / nTrees) / cPsi); });
+    const k = Math.max(1, Math.round(ctx.config.isoContamination * n));
+    const threshold = scores.slice().sort((a, b) => b - a)[Math.min(k, n) - 1];
+    const out = [];
+    for (let i = 0; i < n; i++) if (scores[i] >= threshold) out.push({ row: pos[i], reason: "Isolation Forest 이상" });
+    return out;
+  }
+
+  // 거리 기반 알고리즘의 행 수 상한: O(n²) 계산이 브라우저를 멈추게 하지 않도록 한다.
+  function checkRowLimit(ctx, n, algoName) {
+    const limit = ctx.config.mlRowLimit || 20000;
+    if (n > limit)
+      throw new Error("데이터가 " + limit.toLocaleString() + "행을 넘어 " + algoName +
+        " 검사를 건너뛰었습니다(현재 " + n.toLocaleString() + "행). 데이터를 나누어 다시 시도해 주세요.");
+  }
+
+  // ⑧ LOF — 전체 거리 행렬을 만들지 않고 k-최근접 이웃만 유지한다(메모리 O(n·k)).
+  function lof(ctx) {
+    const { X, pos } = featureMatrix(ctx, true);
+    const n = X.length; if (n < 2) return [];
+    checkRowLimit(ctx, n, "LOF");
+    const k = Math.min(ctx.config.lofNeighbors, n - 1); if (k < 1) return [];
+    const neigh = new Array(n), neighDist = new Array(n), kdist = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      // 크기 k 의 정렬 배열에 삽입하며 k-최근접만 유지
+      const idxs = new Int32Array(k).fill(-1);
+      const ds = new Float64Array(k).fill(Infinity);
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        const d = dist(X[i], X[j]);
+        if (d < ds[k - 1]) {
+          let p = k - 1;
+          while (p > 0 && ds[p - 1] > d) { ds[p] = ds[p - 1]; idxs[p] = idxs[p - 1]; p--; }
+          ds[p] = d; idxs[p] = j;
+        }
+      }
+      neigh[i] = idxs; neighDist[i] = ds; kdist[i] = ds[k - 1];
+    }
+    const lrd = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (let m = 0; m < k; m++) sum += Math.max(kdist[neigh[i][m]], neighDist[i][m]);
+      lrd[i] = sum === 0 ? Infinity : k / sum;
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (let m = 0; m < k; m++) sum += lrd[neigh[i][m]];
+      const lofv = (lrd[i] === Infinity) ? 1 : (sum / k) / lrd[i];
+      if (lofv > 1.5) out.push({ row: pos[i], reason: "LOF 이상" });
+    }
+    return out;
+  }
+
+  // ⑨ DBSCAN
+  function dbscan(ctx) {
+    const { X, pos } = featureMatrix(ctx, true);
+    const n = X.length; if (n < 1) return [];
+    checkRowLimit(ctx, n, "DBSCAN");
+    const eps = ctx.config.dbscanEps, minPts = ctx.config.dbscanMinSamples;
+    const neighbors = (i) => { const res = []; for (let j = 0; j < n; j++) if (dist(X[i], X[j]) <= eps) res.push(j); return res; };
+    const labels = new Int32Array(n).fill(-2); // -2 미방문, -1 노이즈, >=0 군집
+    let cid = 0;
+    for (let i = 0; i < n; i++) {
+      if (labels[i] !== -2) continue;
+      const nb = neighbors(i);
+      if (nb.length < minPts) { labels[i] = -1; continue; }
+      labels[i] = cid;
+      const queue = nb.slice();
+      for (let qi = 0; qi < queue.length; qi++) {
+        const j = queue[qi];
+        if (labels[j] === -1) labels[j] = cid;
+        if (labels[j] !== -2) continue;
+        labels[j] = cid;
+        const nb2 = neighbors(j);
+        if (nb2.length >= minPts) for (const x of nb2) queue.push(x);
+      }
+      cid++;
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) if (labels[i] === -1) out.push({ row: pos[i], reason: "DBSCAN 이상" });
+    return out;
+  }
+
+  // 활성화된 detector 목록 (순서 = 사유 나열 순서)
+  function active(config) {
+    const reg = [
+      [config.missing, "결측치", missing], [config.duplicate, "중복 데이터", duplicate],
+      [config.range, "범위 초과", range], [config.change, "증감률 이상", changeRate],
+      [config.iqr, "IQR", iqr], [config.zscore, "Z-Score", zscore],
+      [config.iforest, "Isolation Forest", isolationForest],
+      [config.lof, "LOF", lof], [config.dbscan, "DBSCAN", dbscan],
+    ];
+    return reg.filter(x => x[0]).map(x => ({ name: x[1], fn: x[2] }));
+  }
+  return { active };
+})();
+
+/* =====================================================================
+ * 6. 분석 오케스트레이션 (진행률 콜백 + UI 양보를 위한 비동기)
+ * ===================================================================== */
+async function runAnalysis(table, config, onProgress) {
+  const sleep = () => new Promise(r => setTimeout(r, 0));
+  onProgress(2, "컬럼 타입 분석 중...");
+  const infos = ColumnAnalyzer.analyze(table);
+  const numericColumns = ColumnAnalyzer.numericColumns(infos);
+  const numericFrame = {};
+  for (const name of numericColumns) {
+    const idx = table.columns.indexOf(name);
+    numericFrame[name] = table.rows.map(r => Values.toNumber(r[idx]));
+  }
+  const ctx = { table, numericColumns, numericFrame, config };
+
+  const reasonsByRow = new Map();
+  const addReason = (row, reason) => {
+    if (!reasonsByRow.has(row)) reasonsByRow.set(row, []);
+    reasonsByRow.get(row).push(reason);
+  };
+
+  // 숫자 컬럼 형식 오류(항상 수행): 값이 있는데 숫자가 아닌 셀은
+  // 결측/숫자 검사 어디에도 걸리지 않는 사각지대이므로 별도로 표시한다.
+  for (const name of numericColumns) {
+    const idx = table.columns.indexOf(name);
+    for (let r = 0; r < table.rows.length; r++) {
+      const raw = table.rows[r][idx];
+      if (!Values.isMissing(raw) && Values.toNumber(raw) === null) {
+        let text = Values.cellText(raw);
+        if (text.length > 20) text = text.slice(0, 20) + "…";
+        addReason(r, "형식 오류 [" + name + "] (값:" + text + ")");
+      }
+    }
+  }
+
+  const detectors = Detectors.active(config);
+  const skipped = [];
+  for (let i = 0; i < detectors.length; i++) {
+    onProgress(Math.round((i / detectors.length) * 90) + 5, detectors[i].name + " 분석 중...");
+    await sleep();
+    try {
+      const findings = detectors[i].fn(ctx);
+      for (const f of findings) addReason(f.row, f.reason);
+    } catch (e) {
+      // 한 알고리즘의 실패가 전체 분석을 막지 않도록 기록만 하고 계속 진행한다.
+      skipped.push({ name: detectors[i].name, message: String((e && e.message) || e) });
+    }
+  }
+  onProgress(96, "결과 집계 중...");
+  await sleep();
+  const flags = [], reasons = [];
+  for (let r = 0; r < table.rows.length; r++) {
+    const rr = reasonsByRow.get(r);
+    if (rr) { flags.push("이상"); reasons.push(rr.join(", ")); }
+    else { flags.push(""); reasons.push(""); }
+  }
+  onProgress(100, "분석이 완료되었습니다.");
+  return { table, infos, flags, reasons, skipped, anomalyCount: flags.filter(f => f).length };
+}
+
+/* ---- Web Worker 진입점: 워커 컨텍스트에서만 등록된다 ---- */
+if (typeof importScripts === "function") {
+  self.onmessage = async (e) => {
+    const { columns, rows, config } = e.data;
+    try {
+      const result = await runAnalysis({ columns, rows }, config,
+        (pct, msg) => self.postMessage({ type: "progress", pct, msg }));
+      self.postMessage({
+        type: "done", flags: result.flags, reasons: result.reasons,
+        skipped: result.skipped, anomalyCount: result.anomalyCount,
+      });
+    } catch (err) {
+      self.postMessage({ type: "error", message: String((err && err.message) || err) });
+    }
+  };
+}
+</script>
 <script>
 "use strict";
 /* =====================================================================
@@ -619,73 +1063,15 @@ const Zip = (function () {
 })();
 
 /* =====================================================================
- * 2. 값 헬퍼 (결측 판별, 숫자/날짜 변환, 포맷)
- * ===================================================================== */
-const Values = (function () {
-  const DATE_FORMATS_RE = [
-    /^\d{4}-\d{1,2}-\d{1,2}$/, /^\d{4}\/\d{1,2}\/\d{1,2}$/, /^\d{4}\.\d{1,2}\.\d{1,2}$/,
-    /^\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(:\d{2})?$/
-  ];
-  function isMissing(v) {
-    if (v === null || v === undefined) return true;
-    if (typeof v === "number" && Number.isNaN(v)) return true;
-    if (typeof v === "string" && v.trim() === "") return true;
-    return false;
-  }
-  function toNumber(v) {
-    if (typeof v === "boolean") return null;
-    if (typeof v === "number") return Number.isNaN(v) ? null : v;
-    if (v instanceof Date) return null;
-    if (typeof v === "string") {
-      const t = v.trim().replace(/,/g, "");
-      if (t === "") return null;
-      // 순수 숫자 형태만 허용 (지수 포함)
-      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return null;
-      const n = Number(t);
-      return Number.isNaN(n) ? null : n;
-    }
-    return null;
-  }
-  function toDate(v) {
-    if (v instanceof Date) return v;
-    if (typeof v === "string") {
-      const t = v.trim();
-      if (t === "") return null;
-      if (!DATE_FORMATS_RE.some(re => re.test(t))) return null;
-      const d = new Date(t.replace(/\./g, "-").replace(/\//g, "-"));
-      return isNaN(d.getTime()) ? null : d;
-    }
-    return null;
-  }
-  function fmtDate(d) {
-    const p = (n) => String(n).padStart(2, "0");
-    const base = d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
-    if (d.getUTCHours() || d.getUTCMinutes() || d.getUTCSeconds())
-      return base + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
-    return base;
-  }
-  function cellText(v) {
-    if (isMissing(v)) return "";
-    if (v instanceof Date) return fmtDate(v);
-    return String(v);
-  }
-  /** 사유 문자열용 숫자 포맷: 정수는 소수점 제거, 소수는 뒤쪽 0 제거. */
-  function fmtNum(x) {
-    const n = Number(x);
-    if (!isFinite(n)) return String(x);
-    if (Number.isInteger(n)) return String(n);
-    return n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
-  }
-  return { isMissing, toNumber, toDate, cellText, fmtNum };
-})();
-
-/* =====================================================================
  * 3. 파일 리더 (xlsx / xls / csv) — Table {columns, rows} 반환
  * ===================================================================== */
 
-// Excel 시리얼 날짜 -> JS Date (UTC 기준, 1899-12-30 epoch)
-function excelSerialToDate(serial) {
-  const ms = Math.round((serial - 25569) * 86400 * 1000);
+// Excel 시리얼 날짜 -> JS Date (UTC 기준). 기본 1900 체계(1899-12-30 epoch),
+// is1904 가 참이면 1904 체계(1904-01-01 epoch)로 해석한다.
+function excelSerialToDate(serial, is1904) {
+  const ms = is1904
+    ? Math.round(serial * 86400 * 1000) + Date.UTC(1904, 0, 1)
+    : Math.round((serial - 25569) * 86400 * 1000);
   return new Date(ms);
 }
 // 열 문자(A, B, ... AA)를 0-based 인덱스로
@@ -883,7 +1269,99 @@ const XlsReader = (function () {
     return { readString, atEnd };
   }
 
+  /** OLE2(CFB) 컨테이너에서 "Workbook"/"Book" 스트림을 추출한다.
+   *  실제 Excel 이 저장하는 .xls 는 BIFF 스트림이 이 컨테이너 안에 들어 있다. */
+  function cfbExtract(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const FREE = 0xFFFFFFFF, END = 0xFFFFFFFE;
+    const sectorSize = 1 << dv.getUint16(30, true);
+    const miniSectorSize = 1 << dv.getUint16(32, true);
+    const dirStart = dv.getUint32(48, true);
+    const miniCutoff = dv.getUint32(56, true);
+    const miniFatStart = dv.getUint32(60, true);
+    const difatStart = dv.getUint32(68, true);
+    const numDifat = dv.getUint32(72, true);
+    const sectorOff = (s) => 512 + s * sectorSize;
+    // FAT 섹터 목록: 헤더의 DIFAT 109개 + 연결된 DIFAT 섹터
+    const fatSectors = [];
+    for (let i = 0; i < 109; i++) {
+      const v = dv.getUint32(76 + i * 4, true);
+      if (v !== FREE && v !== END) fatSectors.push(v);
+    }
+    let ds = difatStart;
+    for (let n = 0; n < numDifat && ds !== FREE && ds !== END; n++) {
+      const base = sectorOff(ds), per = sectorSize / 4 - 1;
+      for (let i = 0; i < per; i++) {
+        const v = dv.getUint32(base + i * 4, true);
+        if (v !== FREE && v !== END) fatSectors.push(v);
+      }
+      ds = dv.getUint32(base + per * 4, true);
+    }
+    const perFat = sectorSize / 4;
+    const fat = new Uint32Array(fatSectors.length * perFat);
+    fatSectors.forEach((fs, idx) => {
+      const base = sectorOff(fs);
+      for (let i = 0; i < perFat; i++) fat[idx * perFat + i] = dv.getUint32(base + i * 4, true);
+    });
+    const chainSectors = (start) => {
+      const list = []; let s = start;
+      while (s !== FREE && s !== END && list.length < 1 << 20) { list.push(s); s = fat[s]; }
+      return list;
+    };
+    const readChain = (start, size) => {
+      const out = new Uint8Array(size); let pos = 0;
+      for (const s of chainSectors(start)) {
+        if (pos >= size) break;
+        const off = sectorOff(s), n = Math.min(sectorSize, size - pos);
+        out.set(bytes.subarray(off, off + n), pos); pos += n;
+      }
+      return out;
+    };
+    // 디렉터리에서 Workbook/Book 스트림과 루트(미니 스트림 컨테이너)를 찾는다.
+    const dirSecs = chainSectors(dirStart);
+    const dirData = new Uint8Array(dirSecs.length * sectorSize);
+    dirSecs.forEach((sec, i) => dirData.set(bytes.subarray(sectorOff(sec), sectorOff(sec) + sectorSize), i * sectorSize));
+    const ddv = new DataView(dirData.buffer);
+    let workbook = null, root = null;
+    for (let e = 0; (e + 1) * 128 <= dirData.length; e++) {
+      const off = e * 128;
+      const nameLen = ddv.getUint16(off + 64, true);
+      if (!nameLen) continue;
+      let name = "";
+      for (let i = 0; i < nameLen / 2 - 1; i++) name += String.fromCharCode(ddv.getUint16(off + i * 2, true));
+      const type = ddv.getUint8(off + 66);
+      const entry = { start: ddv.getUint32(off + 116, true), size: ddv.getUint32(off + 120, true) };
+      if (type === 5) root = entry;
+      if (type === 2 && (name === "Workbook" || name === "Book")) workbook = entry;
+    }
+    if (!workbook) return null;
+    if (workbook.size >= miniCutoff) return readChain(workbook.start, workbook.size);
+    // 작은 스트림은 루트의 미니 스트림 안에 미니 FAT 체인으로 저장된다.
+    if (!root) return null;
+    const mini = readChain(root.start, root.size);
+    const miniFatSecs = chainSectors(miniFatStart);
+    const miniFat = new Uint32Array(miniFatSecs.length * perFat);
+    miniFatSecs.forEach((fs, idx) => {
+      const base = sectorOff(fs);
+      for (let i = 0; i < perFat; i++) miniFat[idx * perFat + i] = dv.getUint32(base + i * 4, true);
+    });
+    const out = new Uint8Array(workbook.size);
+    let pos = 0, s = workbook.start;
+    while (s !== FREE && s !== END && pos < workbook.size) {
+      const n = Math.min(miniSectorSize, workbook.size - pos);
+      out.set(mini.subarray(s * miniSectorSize, s * miniSectorSize + n), pos);
+      pos += n; s = miniFat[s];
+    }
+    return out;
+  }
+
   function read(bytes) {
+    // OLE2 컨테이너(실제 .xls)면 내부의 Workbook 스트림을 꺼내 BIFF 로 해석한다.
+    if (bytes.length > 512 && bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0) {
+      const stream = cfbExtract(bytes);
+      if (!stream) throw new Error("xls 파일에서 Workbook 스트림을 찾지 못했습니다. 파일이 손상되었을 수 있습니다.");
+      bytes = stream;
+    }
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let p = 0;
     // 레코드 순회
@@ -895,6 +1373,37 @@ const XlsReader = (function () {
       p += 4 + len;
       if (type === 0x000A && p >= bytes.length) break; // EOF
     }
+    // 셀 서식 수집: XF(0x00E0) 의 ifmt, FORMAT(0x041E) 의 사용자 서식, DATEMODE(0x0022)
+    // 를 해석하여 "날짜 서식이 적용된 XF 인덱스" 를 판별한다.
+    const xfFmt = [];            // XF 등장 순서 -> ifmt
+    const fmtCode = new Map();   // ifmt -> 서식 문자열
+    let is1904 = false;
+    const BUILTIN_DATE = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
+    function readUnicodeAt(off) {
+      const cch = dv.getUint16(off, true); const grbit = dv.getUint8(off + 2);
+      let str = "", p2 = off + 3;
+      for (let k = 0; k < cch; k++) {
+        if (grbit & 1) { str += String.fromCharCode(dv.getUint16(p2, true)); p2 += 2; }
+        else { str += String.fromCharCode(dv.getUint8(p2)); p2 += 1; }
+      }
+      return str;
+    }
+    for (const rec of records) {
+      if (rec.type === 0x00E0) xfFmt.push(dv.getUint16(rec.start + 2, true));
+      else if (rec.type === 0x041E) {
+        const ifmt = dv.getUint16(rec.start, true);
+        try { fmtCode.set(ifmt, readUnicodeAt(rec.start + 2)); } catch (e) { /* 서식 없음 */ }
+      } else if (rec.type === 0x0022) is1904 = dv.getUint16(rec.start, true) === 1;
+    }
+    function isDateXf(ixfe) {
+      const ifmt = xfFmt[ixfe];
+      if (ifmt === undefined) return false;
+      if (BUILTIN_DATE.has(ifmt)) return true;
+      const code = (fmtCode.get(ifmt) || "").toLowerCase();
+      return /[dy]/.test(code) && /(yy|mm|dd|d|y|hh|ss)/.test(code) && !/[#]/.test(code);
+    }
+    const asValue = (num, ixfe) => (isDateXf(ixfe) ? excelSerialToDate(num, is1904) : num);
+
     // SST 수집 (뒤따르는 CONTINUE 0x003C 포함)
     let sst = [];
     for (let i = 0; i < records.length; i++) {
@@ -933,17 +1442,23 @@ const XlsReader = (function () {
         }
         case 0x0203: { // NUMBER
           const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
-          put(row, col, dv.getFloat64(s + 6, true)); break;
+          const ixfe = dv.getUint16(s + 4, true);
+          put(row, col, asValue(dv.getFloat64(s + 6, true), ixfe)); break;
         }
         case 0x027E: { // RK
           const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
-          put(row, col, rkToNumber(dv.getUint32(s + 6, true))); break;
+          const ixfe = dv.getUint16(s + 4, true);
+          put(row, col, asValue(rkToNumber(dv.getUint32(s + 6, true)), ixfe)); break;
         }
         case 0x00BD: { // MULRK
           const row = dv.getUint16(s, true), first = dv.getUint16(s + 2, true);
           const last = dv.getUint16(s + rec.len - 2, true);
           let off = s + 4;
-          for (let c = first; c <= last; c++) { const rk = dv.getUint32(off + 2, true); put(row, c, rkToNumber(rk)); off += 6; }
+          for (let c = first; c <= last; c++) {
+            const ixfe = dv.getUint16(off, true);
+            const rk = dv.getUint32(off + 2, true);
+            put(row, c, asValue(rkToNumber(rk), ixfe)); off += 6;
+          }
           break;
         }
         case 0x0204: { // LABEL (BIFF8 unicode)
@@ -997,9 +1512,15 @@ const CsvReader = (function () {
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM 제거
     return text;
   }
-  function parse(text) {
+  // 큰 파일에서도 UI 가 멈추지 않도록 청크 단위로 파싱하며 진행률을 보고한다.
+  async function parse(text, onProgress) {
     const rows = []; let row = [], field = "", inQuotes = false;
+    const CHUNK = 262144; // 256K 문자마다 이벤트 루프에 양보
     for (let i = 0; i < text.length; i++) {
+      if (onProgress && i > 0 && i % CHUNK === 0) {
+        onProgress(Math.round((i / text.length) * 100));
+        await new Promise((r) => setTimeout(r, 0));
+      }
       const ch = text[i];
       if (inQuotes) {
         if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
@@ -1015,8 +1536,8 @@ const CsvReader = (function () {
     if (field !== "" || row.length) { row.push(field); rows.push(row); }
     return rows;
   }
-  function read(buffer) {
-    const raw = parse(decode(buffer)).filter(r => !(r.length === 1 && r[0] === ""));
+  async function read(buffer, onProgress) {
+    const raw = (await parse(decode(buffer), onProgress)).filter(r => !(r.length === 1 && r[0] === ""));
     if (!raw.length) return { columns: [], rows: [] };
     const columns = raw[0].map((c, i) => (c && c.trim() !== "") ? c : ("열" + (i + 1)));
     const rows = raw.slice(1);
@@ -1027,413 +1548,170 @@ const CsvReader = (function () {
   return { read, parse, decode };
 })();
 
-/** 확장자에 따라 적절한 리더로 파일을 읽어 Table 을 반환한다. */
-async function readFile(file) {
+/** 확장자에 따라 적절한 리더로 파일을 읽어 Table 을 반환한다.
+ *  onProgress(0~100, 메시지) 로 업로드/파싱 단계 진행률을 보고한다(선택). */
+async function readFile(file, onProgress) {
+  const report = (pct, msg) => { if (onProgress) onProgress(pct, msg); };
+  const yieldUi = () => new Promise((r) => setTimeout(r, 0));
   const name = file.name.toLowerCase();
+  report(5, "파일을 메모리로 읽고 있습니다...");
   const buf = new Uint8Array(await file.arrayBuffer());
   let raw;
-  if (name.endsWith(".csv")) raw = CsvReader.read(buf);
-  else if (name.endsWith(".xlsx")) raw = XlsxReader.read(buf);
-  else if (name.endsWith(".xls")) raw = XlsReader.read(buf);
-  else throw new Error("지원하지 않는 파일 형식입니다.");
+  if (name.endsWith(".csv")) {
+    report(10, "CSV 내용을 해석하고 있습니다...");
+    raw = await CsvReader.read(buf, (p) => report(10 + Math.round(p * 0.85), "CSV 내용을 해석하고 있습니다... (" + p + "%)"));
+  } else if (name.endsWith(".xlsx")) {
+    report(20, "압축을 해제하고 있습니다..."); await yieldUi();
+    raw = XlsxReader.read(buf);
+    report(85, "시트 내용을 정리하고 있습니다..."); await yieldUi();
+  } else if (name.endsWith(".xls")) {
+    report(20, "엑셀(xls) 내용을 해석하고 있습니다..."); await yieldUi();
+    raw = XlsReader.read(buf);
+  } else throw new Error("지원하지 않는 파일 형식입니다.");
   if (!raw.columns.length) throw new Error("데이터를 읽지 못했습니다(빈 파일 또는 형식 오류).");
+  report(100, "파일 읽기가 끝났습니다.");
   return raw; // {columns, rows}
 }
 
 /* =====================================================================
- * 4. 컬럼 타입 자동 분석
- * ===================================================================== */
-const ColumnAnalyzer = (function () {
-  const RATIO = 0.8;
-  function detectType(values) {
-    const nonMissing = values.filter(v => !Values.isMissing(v));
-    if (!nonMissing.length) return "String";
-    let num = 0, date = 0;
-    for (const v of nonMissing) {
-      if (typeof v === "number") num++;
-      else if (v instanceof Date) date++;
-      else if (Values.toNumber(v) !== null) num++;
-      else if (Values.toDate(v) !== null) date++;
-    }
-    const total = nonMissing.length;
-    if (num / total >= RATIO) return "Number";
-    if (date / total >= RATIO) return "Date";
-    return "String";
-  }
-  function analyze(table) {
-    return table.columns.map((name, idx) => ({
-      name, type: detectType(table.rows.map(r => r[idx]))
-    }));
-  }
-  function numericColumns(infos) { return infos.filter(i => i.type === "Number").map(i => i.name); }
-  function buildNumericConfigs(table, infos) {
-    const configs = [];
-    for (const info of infos) {
-      if (info.type !== "Number") continue;
-      const idx = table.columns.indexOf(info.name);
-      const nums = table.rows.map(r => Values.toNumber(r[idx])).filter(n => n !== null);
-      const min = nums.length ? Math.min(...nums) : 0;
-      const max = nums.length ? Math.max(...nums) : 0;
-      configs.push({ name: info.name, actualMin: min, actualMax: max, allowMin: min, allowMax: max, use: true });
-    }
-    return configs;
-  }
-  return { analyze, numericColumns, buildNumericConfigs };
-})();
-
-/* =====================================================================
- * 5. 이상치 탐지 알고리즘 (공통 인터페이스: detect(ctx) -> [{row, reason}])
- *    ctx = { table, numericColumns, numericFrame(col->number[]|null), config }
- * ===================================================================== */
-const Detectors = (function () {
-  const F = Values.fmtNum;
-
-  // ① 결측치
-  function missing(ctx) {
-    const out = [];
-    for (let r = 0; r < ctx.table.rows.length; r++) {
-      const cols = [];
-      ctx.table.columns.forEach((c, i) => { if (Values.isMissing(ctx.table.rows[r][i])) cols.push(c); });
-      if (cols.length) out.push({ row: r, reason: "결측치 [" + cols.join(", ") + "]" });
-    }
-    return out;
-  }
-
-  // ② 중복 데이터 (모든 컬럼 값이 동일한 행)
-  function duplicate(ctx) {
-    const seen = new Map(); const groups = new Map();
-    for (let r = 0; r < ctx.table.rows.length; r++) {
-      const key = ctx.table.rows[r].map(Values.cellText).join("");
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(r);
-    }
-    const out = [];
-    for (const rowsIdx of groups.values())
-      if (rowsIdx.length > 1) rowsIdx.forEach(r => out.push({ row: r, reason: "중복 데이터" }));
-    return out;
-  }
-
-  // ③ 범위 검사
-  function range(ctx) {
-    const out = [];
-    for (const cfg of ctx.config.numericConfigs) {
-      if (!cfg.use) continue;
-      const col = ctx.numericFrame[cfg.name]; if (!col) continue;
-      for (let r = 0; r < col.length; r++) {
-        const v = col[r]; if (v === null) continue;
-        if (v < cfg.allowMin || v > cfg.allowMax)
-          out.push({ row: r, reason: "범위 초과 [" + cfg.name + "] (허용:" + F(cfg.allowMin) + "~" + F(cfg.allowMax) + ", 실제:" + F(v) + ")" });
-      }
-    }
-    return out;
-  }
-
-  // ④ 증감률 검사 (이전 행 대비)
-  function changeRate(ctx) {
-    const out = []; const th = ctx.config.changeRateThreshold;
-    for (const name of ctx.numericColumns) {
-      const col = ctx.numericFrame[name]; let prev = null;
-      for (let r = 0; r < col.length; r++) {
-        const cur = col[r];
-        if (cur === null) { prev = null; continue; }
-        if (prev !== null && prev !== 0) {
-          const ch = (cur - prev) / Math.abs(prev) * 100;
-          if (Math.abs(ch) > th) out.push({ row: r, reason: "증감률 이상 [" + name + "] (" + (ch >= 0 ? "+" : "-") + F(Math.abs(ch)) + "%)" });
-        }
-        prev = cur;
-      }
-    }
-    return out;
-  }
-
-  // ⑤ IQR
-  function iqr(ctx) {
-    const out = [];
-    for (const name of ctx.numericColumns) {
-      const col = ctx.numericFrame[name];
-      const vals = col.filter(v => v !== null).sort((a, b) => a - b);
-      if (vals.length < 4) continue;
-      const q = (p) => { const pos = (vals.length - 1) * p; const lo = Math.floor(pos), hi = Math.ceil(pos); return vals[lo] + (vals[hi] - vals[lo]) * (pos - lo); };
-      const q1 = q(0.25), q3 = q(0.75), iqrv = q3 - q1;
-      if (iqrv === 0) continue;
-      const lower = q1 - 1.5 * iqrv, upper = q3 + 1.5 * iqrv;
-      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; if (v < lower || v > upper) out.push({ row: r, reason: "IQR 이상 [" + name + "]" }); }
-    }
-    return out;
-  }
-
-  // ⑥ Z-Score
-  function zscore(ctx) {
-    const out = []; const th = ctx.config.zscoreThreshold;
-    for (const name of ctx.numericColumns) {
-      const col = ctx.numericFrame[name];
-      const vals = col.filter(v => v !== null);
-      if (vals.length < 2) continue;
-      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-      const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length);
-      if (std === 0) continue;
-      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; const z = (v - mean) / std; if (Math.abs(z) > th) out.push({ row: r, reason: "Z-Score 이상 [" + name + "] (Z=" + F(Math.round(Math.abs(z) * 100) / 100) + ")" }); }
-    }
-    return out;
-  }
-
-  // --- 머신러닝 공통: 특징 행렬(표준화 옵션) ---
-  function featureMatrix(ctx, standardize) {
-    const cols = ctx.numericColumns;
-    if (!cols.length) return { X: [], pos: [] };
-    const X = [], pos = [];
-    for (let r = 0; r < ctx.table.rows.length; r++) {
-      const row = []; let ok = true;
-      for (const c of cols) { const v = ctx.numericFrame[c][r]; if (v === null) { ok = false; break; } row.push(v); }
-      if (ok) { X.push(row); pos.push(r); }
-    }
-    if (standardize && X.length) {
-      for (let j = 0; j < cols.length; j++) {
-        let m = 0; for (const row of X) m += row[j]; m /= X.length;
-        let s = 0; for (const row of X) s += (row[j] - m) * (row[j] - m); s = Math.sqrt(s / X.length) || 1;
-        for (const row of X) row[j] = (row[j] - m) / s;
-      }
-    }
-    return { X, pos };
-  }
-  function dist(a, b) { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
-
-  // 재현성 있는 난수 (mulberry32)
-  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-
-  // ⑦ Isolation Forest
-  function isolationForest(ctx) {
-    const { X, pos } = featureMatrix(ctx, false);
-    const n = X.length, dim = X.length ? X[0].length : 0;
-    if (n < 2 || dim === 0) return [];
-    const rand = rng(42);
-    const nTrees = 100, psi = Math.min(256, n);
-    const heightLimit = Math.ceil(Math.log2(psi));
-    const c = (m) => m > 2 ? 2 * (Math.log(m - 1) + 0.5772156649) - 2 * (m - 1) / m : (m === 2 ? 1 : 0);
-
-    function buildTree(idxs, depth) {
-      if (depth >= heightLimit || idxs.length <= 1) return { size: idxs.length, ext: true };
-      const q = Math.floor(rand() * dim);
-      let mn = Infinity, mx = -Infinity;
-      for (const i of idxs) { const v = X[i][q]; if (v < mn) mn = v; if (v > mx) mx = v; }
-      if (mn === mx) return { size: idxs.length, ext: true };
-      const p = mn + rand() * (mx - mn);
-      const left = [], right = [];
-      for (const i of idxs) (X[i][q] < p ? left : right).push(i);
-      return { ext: false, q, p, left: buildTree(left, depth + 1), right: buildTree(right, depth + 1) };
-    }
-    function pathLen(x, node, depth) {
-      if (node.ext) return depth + c(node.size);
-      return x[node.q] < node.p ? pathLen(x, node.left, depth + 1) : pathLen(x, node.right, depth + 1);
-    }
-    const trees = [];
-    for (let t = 0; t < nTrees; t++) {
-      const sample = [];
-      for (let k = 0; k < psi; k++) sample.push(Math.floor(rand() * n));
-      trees.push(buildTree(sample, 0));
-    }
-    const cPsi = c(psi) || 1;
-    const scores = X.map(x => { let sum = 0; for (const tr of trees) sum += pathLen(x, tr, 0); return Math.pow(2, -(sum / nTrees) / cPsi); });
-    const k = Math.max(1, Math.round(ctx.config.isoContamination * n));
-    const threshold = scores.slice().sort((a, b) => b - a)[Math.min(k, n) - 1];
-    const out = [];
-    for (let i = 0; i < n; i++) if (scores[i] >= threshold) out.push({ row: pos[i], reason: "Isolation Forest 이상" });
-    return out;
-  }
-
-  // ⑧ LOF
-  function lof(ctx) {
-    const { X, pos } = featureMatrix(ctx, true);
-    const n = X.length; if (n < 2) return [];
-    const k = Math.min(ctx.config.lofNeighbors, n - 1); if (k < 1) return [];
-    const D = []; for (let i = 0; i < n; i++) D.push(new Float64Array(n));
-    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const d = dist(X[i], X[j]); D[i][j] = d; D[j][i] = d; }
-    const neigh = [], kdist = new Float64Array(n);
-    for (let i = 0; i < n; i++) {
-      const order = []; for (let j = 0; j < n; j++) if (j !== i) order.push(j);
-      order.sort((a, b) => D[i][a] - D[i][b]);
-      const kn = order.slice(0, k); neigh.push(kn); kdist[i] = D[i][kn[kn.length - 1]];
-    }
-    const lrd = new Float64Array(n);
-    for (let i = 0; i < n; i++) { let sum = 0; for (const o of neigh[i]) sum += Math.max(kdist[o], D[i][o]); lrd[i] = sum === 0 ? Infinity : neigh[i].length / sum; }
-    const out = [];
-    for (let i = 0; i < n; i++) { let sum = 0; for (const o of neigh[i]) sum += lrd[o]; const lofv = (lrd[i] === Infinity) ? 1 : (sum / neigh[i].length) / lrd[i]; if (lofv > 1.5) out.push({ row: pos[i], reason: "LOF 이상" }); }
-    return out;
-  }
-
-  // ⑨ DBSCAN
-  function dbscan(ctx) {
-    const { X, pos } = featureMatrix(ctx, true);
-    const n = X.length; if (n < 1) return [];
-    const eps = ctx.config.dbscanEps, minPts = ctx.config.dbscanMinSamples;
-    const neighbors = (i) => { const res = []; for (let j = 0; j < n; j++) if (dist(X[i], X[j]) <= eps) res.push(j); return res; };
-    const labels = new Int32Array(n).fill(-2); // -2 미방문, -1 노이즈, >=0 군집
-    let cid = 0;
-    for (let i = 0; i < n; i++) {
-      if (labels[i] !== -2) continue;
-      const nb = neighbors(i);
-      if (nb.length < minPts) { labels[i] = -1; continue; }
-      labels[i] = cid;
-      const queue = nb.slice();
-      for (let qi = 0; qi < queue.length; qi++) {
-        const j = queue[qi];
-        if (labels[j] === -1) labels[j] = cid;
-        if (labels[j] !== -2) continue;
-        labels[j] = cid;
-        const nb2 = neighbors(j);
-        if (nb2.length >= minPts) for (const x of nb2) queue.push(x);
-      }
-      cid++;
-    }
-    const out = [];
-    for (let i = 0; i < n; i++) if (labels[i] === -1) out.push({ row: pos[i], reason: "DBSCAN 이상" });
-    return out;
-  }
-
-  // 활성화된 detector 목록 (순서 = 사유 나열 순서)
-  function active(config) {
-    const reg = [
-      [config.missing, "결측치", missing], [config.duplicate, "중복 데이터", duplicate],
-      [config.range, "범위 초과", range], [config.change, "증감률 이상", changeRate],
-      [config.iqr, "IQR", iqr], [config.zscore, "Z-Score", zscore],
-      [config.iforest, "Isolation Forest", isolationForest],
-      [config.lof, "LOF", lof], [config.dbscan, "DBSCAN", dbscan],
-    ];
-    return reg.filter(x => x[0]).map(x => ({ name: x[1], fn: x[2] }));
-  }
-  return { active };
-})();
-
-/* =====================================================================
- * 6. 분석 오케스트레이션 (진행률 콜백 + UI 양보를 위한 비동기)
- * ===================================================================== */
-async function runAnalysis(table, config, onProgress) {
-  const sleep = () => new Promise(r => setTimeout(r, 0));
-  onProgress(2, "컬럼 타입 분석 중...");
-  const infos = ColumnAnalyzer.analyze(table);
-  const numericColumns = ColumnAnalyzer.numericColumns(infos);
-  const numericFrame = {};
-  for (const name of numericColumns) {
-    const idx = table.columns.indexOf(name);
-    numericFrame[name] = table.rows.map(r => Values.toNumber(r[idx]));
-  }
-  const ctx = { table, numericColumns, numericFrame, config };
-
-  const detectors = Detectors.active(config);
-  const reasonsByRow = new Map();
-  for (let i = 0; i < detectors.length; i++) {
-    onProgress(Math.round((i / detectors.length) * 90) + 5, detectors[i].name + " 분석 중...");
-    await sleep();
-    try {
-      const findings = detectors[i].fn(ctx);
-      for (const f of findings) {
-        if (!reasonsByRow.has(f.row)) reasonsByRow.set(f.row, []);
-        reasonsByRow.get(f.row).push(f.reason);
-      }
-    } catch (e) { console.warn(detectors[i].name + " 실패:", e); }
-  }
-  onProgress(96, "결과 집계 중...");
-  await sleep();
-  const flags = [], reasons = [];
-  for (let r = 0; r < table.rows.length; r++) {
-    const rr = reasonsByRow.get(r);
-    if (rr) { flags.push("이상"); reasons.push(rr.join(", ")); }
-    else { flags.push(""); reasons.push(""); }
-  }
-  onProgress(100, "분석이 완료되었습니다.");
-  return { table, infos, flags, reasons, anomalyCount: flags.filter(f => f).length };
-}
-
-/* =====================================================================
- * 7. 결과 Excel 작성기 (Result / Anomaly 2시트, 이상 행 노란색)
+ * 7. 결과 Excel 작성기
+ *
+ *  - buildWorkbook(sheets): 범용 다중 시트 작성기.
+ *    행 배경(없음/노랑/초록/빨강)과 날짜 셀(실제 날짜 형식)을 지원한다.
+ *  - build(result): 단일 분석 결과(Result/Anomaly 2시트, 이상 행 노란색).
+ *  - "=", "@" 로 시작하는 문자열은 수식 주입(CSV Injection) 방어를 위해
+ *    앞에 작은따옴표(')를 붙여 항상 텍스트로 기록한다.
  * ===================================================================== */
 const XlsxWriter = (function () {
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function colLetter(idx) { let s = ""; idx++; while (idx > 0) { const m = (idx - 1) % 26; s = String.fromCharCode(65 + m) + s; idx = Math.floor((idx - 1) / 26); } return s; }
 
-  function cellXml(ref, value, styled) {
-    const sAttr = styled ? ' s="1"' : "";
-    if (Values.isMissing(value)) return '<c r="' + ref + '"' + sAttr + '/>';
-    if (typeof value === "number" && isFinite(value))
-      return '<c r="' + ref + '"' + sAttr + '><v>' + value + '</v></c>';
-    const text = Values.cellText(value);
-    return '<c r="' + ref + '" t="inlineStr"' + sAttr + '><is><t xml:space="preserve">' + esc(text) + '</t></is></c>';
+  // 채움 슬롯: 0 없음, 1 노랑(이상/변경), 2 초록(추가), 3 빨강(삭제)
+  // 셀 서식 인덱스 = 채움슬롯*3 + (0 일반 | 1 날짜 | 2 날짜시각)
+  const FILL_COLORS = [null, "FFFFF2CC", "FFE9F7EC", "FFFDECEA"];
+
+  function dateToSerial(d) {
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+      d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()) / 86400000 + 25569;
   }
 
-  function sheetXml(columns, rows, flags) {
-    // flags: 각 데이터 행의 이상 여부(true면 노란색). 헤더는 스타일 없음.
+  function cellXml(ref, value, fillSlot) {
+    const base = fillSlot * 3;
+    if (Values.isMissing(value)) return base ? '<c r="' + ref + '" s="' + base + '"/>' : '<c r="' + ref + '"/>';
+    if (value instanceof Date) {
+      const hasTime = value.getUTCHours() || value.getUTCMinutes() || value.getUTCSeconds();
+      const s = base + (hasTime ? 2 : 1);
+      return '<c r="' + ref + '" s="' + s + '"><v>' + dateToSerial(value) + "</v></c>";
+    }
+    if (typeof value === "number" && isFinite(value)) {
+      const sAttr = base ? ' s="' + base + '"' : "";
+      return '<c r="' + ref + '"' + sAttr + "><v>" + value + "</v></c>";
+    }
+    let text = Values.cellText(value);
+    // 수식 주입 방어: 스프레드시트가 수식으로 해석할 수 있는 접두 문자를 무력화
+    if (/^[=@]/.test(text)) text = "'" + text;
+    const sAttr = base ? ' s="' + base + '"' : "";
+    return '<c r="' + ref + '" t="inlineStr"' + sAttr + '><is><t xml:space="preserve">' + esc(text) + "</t></is></c>";
+  }
+
+  /** 시트 XML. fillSlots[r] = 데이터 r행의 채움 슬롯(0~3). */
+  function sheetXml(columns, rows, fillSlots) {
     let x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
-    // 헤더
     x += '<row r="1">';
-    columns.forEach((c, i) => x += cellXml(colLetter(i) + "1", c, false));
-    x += '</row>';
-    // 데이터
+    columns.forEach((c, i) => x += cellXml(colLetter(i) + "1", c, 0));
+    x += "</row>";
     for (let r = 0; r < rows.length; r++) {
-      const styled = flags[r] === true;
+      const slot = fillSlots ? (fillSlots[r] || 0) : 0;
       x += '<row r="' + (r + 2) + '">';
-      for (let c = 0; c < columns.length; c++) x += cellXml(colLetter(c) + (r + 2), rows[r][c], styled);
-      x += '</row>';
+      for (let c = 0; c < columns.length; c++) x += cellXml(colLetter(c) + (r + 2), rows[r][c], slot);
+      x += "</row>";
     }
-    x += '</sheetData></worksheet>';
+    x += "</sheetData></worksheet>";
     return x;
   }
 
-  function build(result, flagColName, reasonColName) {
-    const enc = new TextEncoder();
-    const cols = result.table.columns.concat([flagColName, reasonColName]);
-    // Result 시트 데이터
-    const resultRows = result.table.rows.map((r, i) => r.concat([result.flags[i], result.reasons[i]]));
-    const resultFlags = result.flags.map(f => f === "이상");
-    // Anomaly 시트 데이터
-    const anomRows = [], anomFlags = [];
-    for (let i = 0; i < resultRows.length; i++) if (result.flags[i] === "이상") { anomRows.push(resultRows[i]); anomFlags.push(true); }
+  function stylesXml() {
+    // numFmt 164: 날짜, 165: 날짜+시각
+    let fills = '<fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>';
+    for (let f = 1; f <= 3; f++)
+      fills += '<fill><patternFill patternType="solid"><fgColor rgb="' + FILL_COLORS[f] + '"/><bgColor indexed="64"/></patternFill></fill>';
+    let xfs = "";
+    for (let f = 0; f <= 3; f++) {
+      const fillId = f === 0 ? 0 : f + 1; // 채움슬롯 1..3 -> fillId 2..4
+      const fillAttr = f === 0 ? "" : ' applyFill="1"';
+      xfs += '<xf numFmtId="0" fontId="0" fillId="' + fillId + '" borderId="0" xfId="0"' + fillAttr + "/>";
+      xfs += '<xf numFmtId="164" fontId="0" fillId="' + fillId + '" borderId="0" xfId="0" applyNumberFormat="1"' + fillAttr + "/>";
+      xfs += '<xf numFmtId="165" fontId="0" fillId="' + fillId + '" borderId="0" xfId="0" applyNumberFormat="1"' + fillAttr + "/>";
+    }
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="2"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/>' +
+      '<numFmt numFmtId="165" formatCode="yyyy-mm-dd hh:mm:ss"/></numFmts>' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="5">' + fills + "</fills>" +
+      '<borders count="1"><border/></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="12">' + xfs + "</cellXfs>" +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  }
 
-    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  /** 범용 워크북 작성기. sheets = [{name, columns, rows, fillSlots}] */
+  function buildWorkbook(sheets) {
+    const enc = new TextEncoder();
+    let contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
       '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
-      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-      '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-      '</Types>';
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
+    sheets.forEach((s, i) => {
+      contentTypes += '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    });
+    contentTypes += "</Types>";
     const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
-      '</Relationships>';
+      "</Relationships>";
+    let sheetTags = "", relTags = "";
+    sheets.forEach((s, i) => {
+      sheetTags += '<sheet name="' + esc(s.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>';
+      relTags += '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>';
+    });
+    relTags += '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
     const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<sheets><sheet name="Result" sheetId="1" r:id="rId1"/><sheet name="Anomaly" sheetId="2" r:id="rId2"/></sheets></workbook>';
+      "<sheets>" + sheetTags + "</sheets></workbook>";
     const wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
-      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
-      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
-      '</Relationships>';
-    const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
-      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
-      '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill></fills>' +
-      '<borders count="1"><border/></borders>' +
-      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-      '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
-      '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/></cellXfs>' +
-      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + relTags + "</Relationships>";
 
     const entries = [
       { name: "[Content_Types].xml", data: enc.encode(contentTypes) },
       { name: "_rels/.rels", data: enc.encode(rels) },
       { name: "xl/workbook.xml", data: enc.encode(workbook) },
       { name: "xl/_rels/workbook.xml.rels", data: enc.encode(wbRels) },
-      { name: "xl/styles.xml", data: enc.encode(styles) },
-      { name: "xl/worksheets/sheet1.xml", data: enc.encode(sheetXml(cols, resultRows, resultFlags)) },
-      { name: "xl/worksheets/sheet2.xml", data: enc.encode(sheetXml(cols, anomRows, anomFlags)) },
+      { name: "xl/styles.xml", data: enc.encode(stylesXml()) },
     ];
+    sheets.forEach((s, i) => {
+      entries.push({ name: "xl/worksheets/sheet" + (i + 1) + ".xml", data: enc.encode(sheetXml(s.columns, s.rows, s.fillSlots)) });
+    });
     return Zip.write(entries);
   }
-  return { build };
+
+  /** 단일 분석 결과: Result(전체) + Anomaly(이상만), 이상 행 노란색. */
+  function build(result, flagColName, reasonColName) {
+    const cols = result.table.columns.concat([flagColName, reasonColName]);
+    const resultRows = result.table.rows.map((r, i) => r.concat([result.flags[i], result.reasons[i]]));
+    const resultSlots = result.flags.map((f) => (f === "이상" ? 1 : 0));
+    const anomRows = [], anomSlots = [];
+    for (let i = 0; i < resultRows.length; i++)
+      if (result.flags[i] === "이상") { anomRows.push(resultRows[i]); anomSlots.push(1); }
+    return buildWorkbook([
+      { name: "Result", columns: cols, rows: resultRows, fillSlots: resultSlots },
+      { name: "Anomaly", columns: cols, rows: anomRows, fillSlots: anomSlots },
+    ]);
+  }
+  return { build, buildWorkbook };
 })();
 
 /* =====================================================================
@@ -1494,15 +1772,39 @@ const XlsxWriter = (function () {
     setDzDefault(); setDzError("");
     setStatus(STATUS_IDLE); setProgress(0);
   }
-  // 중복/특수 컬럼명 안전화: 빈 이름 보정 + 중복 시 접미사 부여
+  // 중복/특수 컬럼명 안전화: 빈 이름 보정 + 중복 시 사용 중이 아닌 접미사 부여
   function dedupeColumns(cols) {
-    const seen = new Map();
+    const used = new Set();
     return cols.map((c, i) => {
       let name = (c === null || c === undefined || String(c).trim() === "") ? ("열" + (i + 1)) : String(c);
-      if (seen.has(name)) { const n = seen.get(name) + 1; seen.set(name, n); name = name + "_" + n; }
-      else seen.set(name, 1);
+      if (used.has(name)) {
+        let k = 2;
+        while (used.has(name + "_" + k)) k++;
+        name = name + "_" + k;
+      }
+      used.add(name);
       return name;
     });
+  }
+
+  /** 업로드 파일 공통 검증(확장자/빈 파일/크기/매직바이트). 문제가 있으면 Error 를 던진다.
+   *  단일 분석과 두 파일 비교가 동일한 규칙을 공유한다. */
+  async function validateUploadFile(file) {
+    const ext = (file.name.indexOf(".") >= 0 ? file.name.split(".").pop() : "").toLowerCase();
+    if (!ALLOWED_EXT.includes(ext))
+      throw new Error("지원하지 않는 파일 형식입니다: " + (ext ? "." + ext : "(확장자 없음)") + " · CSV 또는 XLSX 파일을 올려 주세요.");
+    if (file.size === 0) throw new Error("빈 파일입니다. 내용이 있는 파일을 선택해 주세요.");
+    if (file.size > MAX_FILE_SIZE)
+      throw new Error("파일이 너무 큽니다. 최대 50MB까지 업로드하실 수 있습니다. (현재 " + (file.size / 1048576).toFixed(1) + "MB)");
+    // 매직바이트로 실제 형식 확인(확장자 위조/잘못된 MIME 방어)
+    const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const isZip = head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04; // "PK.."
+    const isOle = head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0; // 구형 .xls(OLE2)
+    if (ext === "csv" && (isZip || isOle))
+      throw new Error("확장자는 .csv 이지만 실제 내용은 엑셀 파일로 보입니다. .xlsx 형식으로 다시 저장하신 뒤 시도해 주세요.");
+    if (ext === "xlsx" && !isZip)
+      throw new Error("올바른 xlsx(Excel) 파일이 아닙니다. 파일이 손상되었거나 확장자가 실제 형식과 다를 수 있습니다.");
+    return ext;
   }
 
   /** 검증 → 로딩 → 읽기 → 렌더까지 담당하는 공통 업로드 처리기(버튼/드롭 공용). */
@@ -1511,32 +1813,17 @@ const XlsxWriter = (function () {
     if (isUploading) { setDzError("이미 다른 파일을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."); return; }
     setDzError("");
 
-    // --- 확장자/크기 사전 검증 ---
-    const ext = (file.name.indexOf(".") >= 0 ? file.name.split(".").pop() : "").toLowerCase();
-    if (!ALLOWED_EXT.includes(ext)) {
-      setDzError("지원하지 않는 파일 형식입니다: " + (ext ? "." + ext : "(확장자 없음)") + " · CSV 또는 XLSX 파일을 올려 주세요.");
-      return;
-    }
-    if (file.size === 0) { setDzError("빈 파일입니다. 내용이 있는 파일을 선택해 주세요."); return; }
-    if (file.size > MAX_FILE_SIZE) {
-      setDzError("파일이 너무 큽니다. 최대 50MB까지 업로드하실 수 있습니다. (현재 " + (file.size / 1048576).toFixed(1) + "MB)");
-      return;
-    }
+    // --- 사전 검증(실패 시 기존에 불러온 데이터는 그대로 유지) ---
+    try { await validateUploadFile(file); }
+    catch (err) { setDzError(String((err && err.message) || err)); return; }
 
     setUploading(true);
     setStatus("파일을 읽고 있습니다..."); setProgress(0);
     $("fileName").textContent = file.name; $("fileName").classList.remove("filecue");
     try {
       await new Promise((r) => setTimeout(r, 0)); // 로딩 표시가 그려질 기회를 준다
-      // 매직바이트로 실제 형식 확인(확장자 위조/잘못된 MIME 방어)
-      const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
-      const isZip = head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04; // "PK.."
-      const isOle = head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0; // 구형 .xls(OLE2)
-      if (ext === "csv" && (isZip || isOle))
-        throw new Error("확장자는 .csv 이지만 실제 내용은 엑셀 파일로 보입니다. .xlsx 형식으로 다시 저장하신 뒤 시도해 주세요.");
-      if (ext === "xlsx" && !isZip)
-        throw new Error("올바른 xlsx(Excel) 파일이 아닙니다. 파일이 손상되었거나 확장자가 실제 형식과 다를 수 있습니다.");
-      const raw = await readFile(file);
+      // 업로드/파싱 단계 진행률을 진행 막대에 표시한다.
+      const raw = await readFile(file, (pct, msg) => { setProgress(pct); setStatus(msg); });
       const columns = dedupeColumns(raw.columns);
       table = new TableWrapper(columns, raw.rows);
       const infos = ColumnAnalyzer.analyze(table);
@@ -1647,13 +1934,43 @@ const XlsxWriter = (function () {
     };
   }
 
+  // ----- 분석 실행: Web Worker 우선(대용량에서도 화면이 멈추지 않음), 실패 시 메인 스레드 폴백 -----
+  let analysisWorker;   // undefined=미시도, false=사용 불가, Worker=사용 가능
+  function getAnalysisWorker() {
+    if (analysisWorker !== undefined) return analysisWorker;
+    try {
+      const srcText = document.getElementById("engineScript").textContent;
+      const blobUrl = URL.createObjectURL(new Blob([srcText], { type: "text/javascript" }));
+      analysisWorker = new Worker(blobUrl);
+    } catch (e) {
+      console.warn("Web Worker 를 사용할 수 없어 메인 스레드에서 분석합니다:", e);
+      analysisWorker = false;
+    }
+    return analysisWorker;
+  }
+  /** 워커(가능 시) 또는 메인 스레드에서 분석을 실행한다. */
+  function runAnalysisAsync(tbl, config, onProgress) {
+    const w = getAnalysisWorker();
+    if (!w) return runAnalysis(tbl, config, onProgress); // 폴백
+    return new Promise((resolve, reject) => {
+      w.onmessage = (e) => {
+        const m = e.data;
+        if (m.type === "progress") onProgress(m.pct, m.msg);
+        else if (m.type === "done") resolve({ table: tbl, flags: m.flags, reasons: m.reasons, skipped: m.skipped, anomalyCount: m.anomalyCount });
+        else if (m.type === "error") reject(new Error(m.message));
+      };
+      w.onerror = (e) => reject(new Error(e.message || "워커 실행 오류"));
+      w.postMessage({ columns: tbl.columns, rows: tbl.rows, config });
+    });
+  }
+
   // 분석 시작
   $("btnRun").addEventListener("click", async () => {
     if (!table) { alert("분석할 파일을 먼저 선택해 주세요."); return; }
     $("btnRun").disabled = true; setProgress(0);
     try {
       const config = collectConfig();
-      lastResult = await runAnalysis(table, config, (pct, msg) => { setProgress(pct); setStatus(msg); });
+      lastResult = await runAnalysisAsync(table, config, (pct, msg) => { setProgress(pct); setStatus(msg); });
       renderResult(lastResult);
       $("resultPanel").classList.remove("hidden");
     } catch (err) {
@@ -1667,12 +1984,25 @@ const XlsxWriter = (function () {
       '<div class="stat"><b>' + total + '</b>전체 행</div>' +
       '<div class="stat"><b style="color:#b23c17">' + anom + '</b>이상 행</div>' +
       '<div class="stat"><b style="color:#2e7d32">' + (total - anom) + '</b>정상 행</div>';
+    // 수행되지 못한 검사가 있으면 사용자에게 분명하게 알린다.
+    const skipped = result.skipped || [];
+    if (skipped.length) {
+      $("skipNote").innerHTML = "⚠ 아래 검사는 수행되지 못했습니다.<br>" +
+        skipped.map((s) => "· " + escapeHtml(s.name) + ": " + escapeHtml(s.message)).join("<br>");
+      $("skipNote").classList.remove("hidden");
+    } else {
+      $("skipNote").classList.add("hidden"); $("skipNote").textContent = "";
+    }
     renderPreview(result);
   }
 
   function renderPreview(result) {
     const onlyAnom = $("onlyAnomaly").checked;
-    const cols = result.table.columns.concat([FLAG_COL, REASON_COL]);
+    const MAX_COLS = 40; // 열이 아주 많은 파일도 미리보기가 느려지지 않도록 상한
+    const srcCols = result.table.columns;
+    const colCut = srcCols.length > MAX_COLS;
+    const useCols = colCut ? srcCols.slice(0, MAX_COLS) : srcCols;
+    const cols = useCols.concat(colCut ? ["…"] : []).concat([FLAG_COL, REASON_COL]);
     const thead = $("resultTable").querySelector("thead");
     const tbody = $("resultTable").querySelector("tbody");
     thead.innerHTML = "<tr>" + cols.map(c => "<th>" + escapeHtml(c) + "</th>").join("") + "</tr>";
@@ -1682,18 +2012,21 @@ const XlsxWriter = (function () {
       if (onlyAnom && !isAnom) continue;
       if (shown >= LIMIT) break;
       shown++;
-      const cells = result.table.rows[r].map(v => "<td>" + escapeHtml(Values.cellText(v)) + "</td>").join("");
+      const rowVals = colCut ? result.table.rows[r].slice(0, MAX_COLS) : result.table.rows[r];
+      const cells = rowVals.map(v => "<td>" + escapeHtml(Values.cellText(v)) + "</td>").join("")
+        + (colCut ? "<td>…</td>" : "");
       html += "<tr class='" + (isAnom ? "anomaly" : "") + "'>" + cells +
         "<td>" + result.flags[r] + "</td><td>" + escapeHtml(result.reasons[r]) + "</td></tr>";
     }
     tbody.innerHTML = html || '<tr><td colspan="' + cols.length + '" class="muted">표시할 행이 없습니다.</td></tr>';
     const totalShown = onlyAnom ? result.anomalyCount : result.table.rows.length;
     $("previewNote").textContent = "미리보기: " + shown + " / " + totalShown + " 행 표시" +
-      (totalShown > LIMIT ? " (다운로드 파일에는 전체가 포함됩니다)" : "");
+      (totalShown > LIMIT ? " (다운로드 파일에는 전체가 포함됩니다)" : "") +
+      (colCut ? " · 열은 " + MAX_COLS + "개까지만 미리보기로 표시됩니다(파일에는 전체 포함)" : "");
   }
   $("onlyAnomaly").addEventListener("change", () => { if (lastResult) renderPreview(lastResult); });
 
-  function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
   // 결과 다운로드
   $("btnDownload").addEventListener("click", () => {
@@ -1710,7 +2043,7 @@ const XlsxWriter = (function () {
 
   // 테스트 편의를 위해 일부 내부 기능을 전역에 노출
   window.__anomaly = { readFile, runAnalysis, XlsxWriter, ColumnAnalyzer, Zip, Values, TableWrapper };
-  window.__upload = { handleFile, handleFiles, dedupeColumns, escapeHtml };
+  window.__upload = { handleFile, handleFiles, dedupeColumns, escapeHtml, validateUploadFile };
 })();
 
 /* =====================================================================
@@ -1794,7 +2127,7 @@ const TOOLTIP_INFO = {
     purpose: "전체 기준이 아니라 '자기 주변 무리' 기준으로 튀는 값을 찾기 위해 사용합니다.",
     when: "데이터가 여러 그룹으로 나뉘어 있고, 그룹 안에서의 이상값을 찾고 싶을 때 강점이 있습니다.",
     common: "이웃 수(n_neighbors)는 20을 많이 사용합니다.",
-    caution: "계산량이 데이터 수의 제곱에 비례해 늘어나므로, 수만 행 이상에서는 시간이 걸릴 수 있습니다.",
+    caution: "계산량이 데이터 수의 제곱에 비례해 늘어나 2만 행을 넘는 데이터는 자동으로 건너뛰고 알려 드립니다.",
   },
   opt_dbscan: {
     title: "DBSCAN",
@@ -1802,7 +2135,7 @@ const TOOLTIP_INFO = {
     purpose: "밀집된 정상 데이터 사이에 드문드문 떨어진 값을 찾기 위해 사용합니다.",
     when: "정상 데이터가 몇 개의 덩어리로 모여 있는 형태일 때 사용해 주세요.",
     common: "eps 0.5, min_samples 5 조합을 출발점으로 많이 사용합니다.",
-    caution: "eps 값에 매우 민감합니다. 값을 바꿔 가며 결과를 비교해 보시는 것이 좋습니다.",
+    caution: "eps 값에 매우 민감합니다. 값을 바꿔 가며 결과를 비교해 보시는 것이 좋습니다. 2만 행을 넘는 데이터는 자동으로 건너뛰고 알려 드립니다.",
   },
 
   /* --- 알고리즘 파라미터(수치 입력) --- */
@@ -1896,14 +2229,14 @@ const TOOLTIP_INFO = {
   },
   opt_cmp_z: {
     title: "Z-Score 기반 변화량",
-    meaning: "같은 컬럼의 전체 변화량과 비교해, 유난히 큰 변화를 통계적으로 찾아냅니다.",
+    meaning: "매칭된 모든 행의 변화량(변화가 없던 행은 0으로 포함)과 비교해, 유난히 큰 변화를 통계적으로 찾아냅니다.",
     purpose: "다른 행들의 변화 수준과 비교했을 때 튀는 변화를 찾기 위해 사용합니다.",
     when: "전반적으로 값이 조금씩 변한 가운데 특정 행만 크게 변한 경우를 찾을 때 유용합니다.",
     caution: "변경된 행이 3건 미만이면 통계 계산이 어려워 자동으로 건너뜁니다.",
   },
   opt_cmp_iqr: {
     title: "IQR 기반 변화량",
-    meaning: "변화량을 크기 순으로 나열해, 가운데 50% 범위에서 크게 벗어난 변화를 이상 변동으로 판단합니다.",
+    meaning: "매칭된 모든 행의 변화량(변화 없음=0 포함)을 크기 순으로 나열해, 가운데 50% 범위에서 크게 벗어난 변화를 이상 변동으로 판단합니다.",
     purpose: "평균이 극단값에 흔들리지 않는 방식으로 큰 변화를 찾기 위해 사용합니다.",
     when: "변화량에 극단값이 섞여 있을 가능성이 높을 때 Z-Score 보다 안정적입니다.",
     caution: "변경된 행이 4건 미만이면 사분위 계산이 어려워 자동으로 건너뜁니다.",
@@ -1958,7 +2291,7 @@ const InfoTooltip = (function () {
   // 터치 전용 기기(hover 불가) 판별 — 클릭 시점에 평가한다.
   const isTouchOnly = () => window.matchMedia && window.matchMedia("(hover: none)").matches;
 
-  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
   function ensure() {
     if (tip) return tip;
@@ -2073,8 +2406,6 @@ window.__infoTooltip = InfoTooltip;
   const dedupe = window.__upload.dedupeColumns;
   const fmt = Values.fmtNum;
 
-  const ALLOWED = ["csv", "xlsx", "xls"];
-  const MAX_SIZE = 50 * 1024 * 1024;
   const PREVIEW_LIMIT = 300;
 
   // 슬롯 상태: {name, table} 또는 null
@@ -2121,21 +2452,9 @@ window.__infoTooltip = InfoTooltip;
     }
   }
 
-  /** 검증 + 읽기(단일 분석과 동일한 규칙: 확장자/크기/매직바이트). */
+  /** 검증 + 읽기 — 단일 분석과 동일한 공통 검증 규칙(validateUploadFile)을 재사용한다. */
   async function loadForCompare(file) {
-    const ext = (file.name.indexOf(".") >= 0 ? file.name.split(".").pop() : "").toLowerCase();
-    if (!ALLOWED.includes(ext))
-      throw new Error("지원하지 않는 파일 형식입니다: " + (ext ? "." + ext : "(확장자 없음)") + " · CSV 또는 XLSX 파일을 올려 주세요.");
-    if (file.size === 0) throw new Error("빈 파일입니다. 내용이 있는 파일을 선택해 주세요.");
-    if (file.size > MAX_SIZE)
-      throw new Error("파일이 너무 큽니다. 최대 50MB까지 업로드하실 수 있습니다. (현재 " + (file.size / 1048576).toFixed(1) + "MB)");
-    const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
-    const isZip = head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04;
-    const isOle = head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0;
-    if (ext === "csv" && (isZip || isOle))
-      throw new Error("확장자는 .csv 이지만 실제 내용은 엑셀 파일로 보입니다. .xlsx 형식으로 다시 저장하신 뒤 시도해 주세요.");
-    if (ext === "xlsx" && !isZip)
-      throw new Error("올바른 xlsx(Excel) 파일이 아닙니다. 파일이 손상되었거나 확장자가 실제 형식과 다를 수 있습니다.");
+    await window.__upload.validateUploadFile(file);
     const raw = await readFile(file);
     return { columns: dedupe(raw.columns), rows: raw.rows };
   }
@@ -2329,22 +2648,31 @@ window.__infoTooltip = InfoTooltip;
     const ga = groupByKey(tA, kaIdx), gb = groupByKey(tB, kbIdx);
     let dupKeys = 0;
     const records = [];
+    // 추가/삭제 행의 내용 스냅샷(결과 표/다운로드에서 무엇이 바뀌었는지 보여 주기 위함)
+    const SNAP_MAX = 12;
+    const snap = (t, ri) => {
+      const parts = t.columns.slice(0, SNAP_MAX).map((c, i) => [c, Values.cellText(t.rows[ri][i])]);
+      if (t.columns.length > SNAP_MAX) parts.push(["…", "외 " + (t.columns.length - SNAP_MAX) + "개 컬럼"]);
+      return parts;
+    };
+    // 컬럼별 '변화 없음(0)' 수치 쌍 개수 — 이상 변동 통계의 모수에 포함한다.
+    const zeroByCol = new Map();
     for (const [key, arrA] of ga.groups) {
       const arrB = gb.groups.get(key) || [];
       if (arrA.length > 1 || arrB.length > 1) dupKeys++;
       const m = Math.min(arrA.length, arrB.length);
-      for (let k = 0; k < m; k++) records.push(compareRow(tA, tB, mapAB, key, arrA[k], arrB[k]));
-      for (let k = m; k < arrA.length; k++) records.push({ status: "삭제", key, tags: [], cells: [] });
-      for (let k = m; k < arrB.length; k++) records.push({ status: "추가", key, tags: [], cells: [] });
+      for (let k = 0; k < m; k++) records.push(compareRow(tA, tB, mapAB, key, arrA[k], arrB[k], zeroByCol));
+      for (let k = m; k < arrA.length; k++) records.push({ status: "삭제", key, tags: [], cells: [], snapshot: snap(tA, arrA[k]) });
+      for (let k = m; k < arrB.length; k++) records.push({ status: "추가", key, tags: [], cells: [], snapshot: snap(tB, arrB[k]) });
     }
     for (const [key, arrB] of gb.groups) {
       if (ga.groups.has(key)) continue;
       if (arrB.length > 1) dupKeys++;
-      for (let k = 0; k < arrB.length; k++) records.push({ status: "추가", key, tags: [], cells: [] });
+      for (let k = 0; k < arrB.length; k++) records.push({ status: "추가", key, tags: [], cells: [], snapshot: snap(tB, arrB[k]) });
     }
 
-    // 3) 이상 변동 판정(수치 변화 셀 대상)
-    applyAnomalyRules(records, opts);
+    // 3) 이상 변동 판정(수치 변화 셀 대상, 변화 없음 0 도 모수에 포함)
+    applyAnomalyRules(records, opts, zeroByCol);
     for (const rec of records) {
       if (rec.cells.some((c) => c.anom && c.anom.length)) rec.tags.push("이상 변동");
     }
@@ -2367,8 +2695,8 @@ window.__infoTooltip = InfoTooltip;
     return { records, summary, notes };
   }
 
-  /** 매칭된 두 행의 셀 단위 비교. */
-  function compareRow(tA, tB, mapAB, key, ai, bi) {
+  /** 매칭된 두 행의 셀 단위 비교. 동일한 수치 쌍은 zeroByCol 에 집계한다. */
+  function compareRow(tA, tB, mapAB, key, ai, bi, zeroByCol) {
     const cells = []; const tags = [];
     for (const [i, j] of mapAB) {
       const col = tA.columns[i];
@@ -2383,7 +2711,10 @@ window.__infoTooltip = InfoTooltip;
       }
       const na = Values.toNumber(va), nb = Values.toNumber(vb);
       if (na !== null && nb !== null) {
-        if (Math.abs(na - nb) <= 1e-9 * Math.max(1, Math.abs(na), Math.abs(nb))) continue;
+        if (Math.abs(na - nb) <= 1e-9 * Math.max(1, Math.abs(na), Math.abs(nb))) {
+          if (zeroByCol) zeroByCol.set(col, (zeroByCol.get(col) || 0) + 1);
+          continue;
+        }
         const delta = nb - na;
         const pct = na !== 0 ? (delta / Math.abs(na)) * 100 : null;
         cells.push({ col, type: "number", a: na, b: nb, delta, pct, anom: [] });
@@ -2405,9 +2736,11 @@ window.__infoTooltip = InfoTooltip;
     return { status: cells.length ? "변경" : "동일", key, tags, cells };
   }
 
-  /** 이상 변동 규칙(변화율/Z-Score/IQR)을 수치 변화 셀에 적용한다. */
-  function applyAnomalyRules(records, opts) {
-    // 컬럼별 변화량 수집
+  /** 이상 변동 규칙(변화율/Z-Score/IQR)을 수치 변화 셀에 적용한다.
+   *  통계 모수에는 '변화가 없던 행(변화량 0)' 도 포함하여
+   *  "전체 행 대비 유난히 큰 변화" 라는 정의에 맞게 계산한다. */
+  function applyAnomalyRules(records, opts, zeroByCol) {
+    // 컬럼별 변화 셀 수집
     const byCol = new Map();
     for (const rec of records)
       for (const c of rec.cells)
@@ -2415,7 +2748,13 @@ window.__infoTooltip = InfoTooltip;
           if (!byCol.has(c.col)) byCol.set(c.col, []);
           byCol.get(c.col).push(c);
         }
-    for (const [, cells] of byCol) {
+    const quantile = (sorted, p) => {
+      const pos = (sorted.length - 1) * p, lo = Math.floor(pos), hi = Math.ceil(pos);
+      return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+    };
+    for (const [col, cells] of byCol) {
+      const zeros = (zeroByCol && zeroByCol.get(col)) || 0;
+      const poolSize = cells.length + zeros;
       // ① 변화율 기준(급격한 증가/감소)
       if (opts.useRate) {
         for (const c of cells) {
@@ -2424,25 +2763,29 @@ window.__infoTooltip = InfoTooltip;
             c.anom.push(c.pct >= 0 ? "급격한 증가" : "급격한 감소");
         }
       }
-      // ② Z-Score 기반 변화량
-      if (opts.useZ && cells.length >= 3) {
-        const deltas = cells.map((c) => c.delta);
-        const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
-        const std = Math.sqrt(deltas.reduce((a, b) => a + (b - mean) * (b - mean), 0) / deltas.length);
+      // ② Z-Score 기반 변화량(모수: 변화 셀 + 변화량 0)
+      if (opts.useZ && poolSize >= 3) {
+        let sum = 0;
+        for (const c of cells) sum += c.delta;
+        const mean = sum / poolSize; // 0 들은 합에 기여하지 않음
+        let sq = zeros * mean * mean;
+        for (const c of cells) sq += (c.delta - mean) * (c.delta - mean);
+        const std = Math.sqrt(sq / poolSize);
         if (std > 0)
           for (const c of cells) {
             const z = Math.abs((c.delta - mean) / std);
             if (z > opts.zTh) c.anom.push("변화량 Z=" + fmt(Math.round(z * 100) / 100));
           }
       }
-      // ③ IQR 기반 변화량
-      if (opts.useIqr && cells.length >= 4) {
-        const sorted = cells.map((c) => c.delta).sort((a, b) => a - b);
-        const q = (p) => {
-          const pos = (sorted.length - 1) * p, lo = Math.floor(pos), hi = Math.ceil(pos);
-          return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-        };
-        const q1 = q(0.25), q3 = q(0.75), iqr = q3 - q1;
+      // ③ IQR 기반 변화량(모수: 변화 셀 + 변화량 0)
+      if (opts.useIqr && poolSize >= 4) {
+        let sorted = cells.map((c) => c.delta).concat(new Array(zeros).fill(0)).sort((a, b) => a - b);
+        let q1 = quantile(sorted, 0.25), q3 = quantile(sorted, 0.75), iqr = q3 - q1;
+        if (iqr === 0 && cells.length >= 4) {
+          // 대부분 변화가 없어 IQR 이 0 이면, 변화가 있었던 셀만으로 다시 계산(퇴화 방지)
+          sorted = cells.map((c) => c.delta).sort((a, b) => a - b);
+          q1 = quantile(sorted, 0.25); q3 = quantile(sorted, 0.75); iqr = q3 - q1;
+        }
         if (iqr > 0) {
           const lower = q1 - 1.5 * iqr, upper = q3 + 1.5 * iqr;
           for (const c of cells)
@@ -2538,7 +2881,9 @@ window.__infoTooltip = InfoTooltip;
       matched++;
       if (shown >= PREVIEW_LIMIT) continue;
       shown++;
-      const chips = rec.cells.map(cellChipHtml).join(" ");
+      let chips = rec.cells.map(cellChipHtml).join(" ");
+      if (!chips && rec.snapshot)
+        chips = rec.snapshot.map(([c, v]) => '<span class="chg miss">' + esc(c) + ": " + esc(v) + "</span>").join(" ");
       const tagHtml = rec.tags.map((t) =>
         t === "이상 변동" ? '<span class="tag-anom">⚠ ' + esc(t) + "</span>" : esc(t)).join(", ");
       html += '<tr class="' + STATUS_ROW[rec.status] + '">' +
@@ -2552,6 +2897,53 @@ window.__infoTooltip = InfoTooltip;
       (matched > PREVIEW_LIMIT ? " (상위 " + PREVIEW_LIMIT + "행까지만 미리보기로 보여 드립니다)" : "");
   }
   $("cmpFilter").addEventListener("change", () => { if (lastCompare) renderCompareTable(lastCompare); });
+
+  /** 셀 변경 내용을 다운로드용 텍스트로 변환한다(화면 칩과 동일한 정보). */
+  function cellChangeText(c) {
+    if (c.type === "number") {
+      let extra = c.pct === null ? "0에서 변경" : (c.pct >= 0 ? "+" : "-") + fmt(Math.round(Math.abs(c.pct) * 100) / 100) + "%";
+      if (c.anom && c.anom.length) extra += " · " + c.anom.join(", ");
+      return c.col + ": " + fmt(c.a) + " → " + fmt(c.b) + " (" + extra + ")";
+    }
+    if (c.type === "missing") {
+      const from = Values.isMissing(c.a) ? "(결측)" : Values.cellText(c.a);
+      const to = Values.isMissing(c.b) ? "(결측)" : Values.cellText(c.b);
+      return c.col + ": " + from + " → " + to + " (결측값 변경)";
+    }
+    if (c.type === "type")
+      return c.col + ": " + Values.cellText(c.a) + " → " + Values.cellText(c.b) + " (타입 변경)";
+    return c.col + ": " + Values.cellText(c.a) + " → " + Values.cellText(c.b);
+  }
+
+  // 비교 결과를 Excel 로 저장(Compare 시트: 상태별 색상, Summary 시트: 요약)
+  $("btnCmpDownload").addEventListener("click", () => {
+    if (!lastCompare) return;
+    const SLOT = { "변경": 1, "추가": 2, "삭제": 3, "동일": 0 };
+    const cols = ["상태", "기준값", "변경 내용", "태그"];
+    const rows = [], slots = [];
+    for (const rec of lastCompare.records) {
+      let detail = rec.cells.map(cellChangeText).join(" / ");
+      if (!detail && rec.snapshot) detail = rec.snapshot.map(([c, v]) => c + ": " + v).join(" / ");
+      rows.push([rec.status, rec.key, detail, rec.tags.join(", ")]);
+      slots.push(SLOT[rec.status] || 0);
+    }
+    const s = lastCompare.summary;
+    const sumRows = [
+      ["총 비교 행", s.total], ["동일", s.same], ["변경", s.changed],
+      ["추가", s.added], ["삭제", s.removed], ["이상 변동 행", s.anomalyRows],
+      ["결측값 변경(셀)", s.missingCells], ["타입 변경(셀)", s.typeCells],
+    ].concat(lastCompare.notes.map((n) => ["안내", n]));
+    const bytes = XlsxWriter.buildWorkbook([
+      { name: "Compare", columns: cols, rows, fillSlots: slots },
+      { name: "Summary", columns: ["항목", "값"], rows: sumRows, fillSlots: null },
+    ]);
+    const fname = "compare_result.xlsx";
+    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
 
   // 테스트 편의를 위해 내부 기능 노출
   window.__compare = { slots, inferKeys, compareTables, handleSlotFile, switchMode, nameScore };
