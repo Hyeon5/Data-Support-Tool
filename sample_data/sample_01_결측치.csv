@@ -1,0 +1,21 @@
+﻿사번,이름,부서,급여(만원),이메일
+1001,김민준,영업,3200,user1001@example.com
+1002,이서연,개발,3237,user1002@example.com
+1003,,인사,3274,user1003@example.com
+1004,최지우,재무,3311,user1004@example.com
+1005,정하준,영업,3348,user1005@example.com
+1006,강서아,개발,3385,user1006@example.com
+1007,조은우,인사,,user1007@example.com
+1008,윤지호,재무,3459,user1008@example.com
+1009,임수아,영업,3496,user1009@example.com
+1010,한시우,개발,3533,user1010@example.com
+1011,오하린,   ,3570,user1011@example.com
+1012,서준서,재무,3607,user1012@example.com
+1013,신아윤,영업,3644,user1013@example.com
+1014,권도현,개발,3681,user1014@example.com
+1015,황유나,인사,3718,
+1016,안건우,재무,3755,user1016@example.com
+1017,송다은,영업,3792,user1017@example.com
+1018,,개발,3829,
+1019,고예준,인사,3866,user1019@example.com
+1020,문채원,재무,3903,user1020@example.com
