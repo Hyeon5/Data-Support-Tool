@@ -70,6 +70,30 @@
   .note{font-size:12px; color:var(--muted); margin-top:6px;}
   .runbar{position:sticky; bottom:0; background:var(--panel); border-top:1px solid var(--line);
     padding:14px 18px; border-radius:0 0 10px 10px;}
+  /* Info(ⓘ) 아이콘 + 툴팁 */
+  .info-icon{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:16px; height:16px; margin-left:5px; padding:0; flex:0 0 auto;
+    border:0; border-radius:50%; background:#c7d2e0; color:#1f2933;
+    font-size:11px; font-style:italic; font-weight:700;
+    font-family:Georgia,"Times New Roman",serif; line-height:1;
+    cursor:help; vertical-align:middle;
+  }
+  .info-icon:hover{ background:var(--accent); color:#fff; }
+  .info-icon:focus-visible{ outline:none; background:var(--accent); color:#fff;
+    box-shadow:0 0 0 3px rgba(47,111,237,.35); }
+  .param label{ display:inline-flex; align-items:center; }
+  .info-tooltip{
+    position:absolute; z-index:1000; max-width:320px;
+    background:#1f2933; color:#e7edf3; border-radius:8px; padding:11px 13px;
+    font-size:12.5px; line-height:1.55; box-shadow:0 8px 28px rgba(0,0,0,.28);
+    opacity:0; visibility:hidden; pointer-events:none; transition:opacity .12s ease;
+  }
+  .info-tooltip.visible{ opacity:1; visibility:visible; pointer-events:auto; }
+  .info-tooltip .it-title{ font-weight:700; font-size:13px; color:#fff; margin-bottom:6px; }
+  .info-tooltip .it-row{ display:flex; gap:8px; margin-top:4px; }
+  .info-tooltip .it-label{ flex:0 0 62px; color:#9fb3c8; font-size:11.5px; }
+  .info-tooltip .it-text{ flex:1; }
 </style>
 </head>
 <body>
@@ -1375,6 +1399,244 @@ const XlsxWriter = (function () {
   // 테스트 편의를 위해 일부 내부 기능을 전역에 노출
   window.__anomaly = { readFile, runAnalysis, XlsxWriter, ColumnAnalyzer, Zip, Values, TableWrapper };
 })();
+
+/* =====================================================================
+ * 9. Info(ⓘ) 아이콘 + 툴팁 — 옵션/파라미터 설명
+ *
+ *  - 설명 문구는 아래 TOOLTIP_INFO 설정 객체에서만 관리한다(하드코딩 X).
+ *  - key 는 해당 입력 요소의 id 와 동일하게 맞춘다(자동 매핑).
+ *  - 새 옵션 추가 시: 화면에 입력 요소를 추가하고, 그 id 를 key 로 하는
+ *    설명 항목만 이 객체에 추가하면 툴팁이 자동으로 동작한다.
+ *    (예시로 PCA / KMeans 항목도 미리 정의해 두었다 — UI 추가 시 즉시 동작)
+ *  - InfoTooltip 은 특정 화면에 종속되지 않는 공통 컴포넌트로,
+ *    다른 화면에서도 InfoTooltip.createIcon(key) 로 재사용할 수 있다.
+ * ===================================================================== */
+const TOOLTIP_INFO = {
+  /* --- ② 분석 옵션(체크박스) --- */
+  opt_missing: {
+    title: "결측치 탐지",
+    meaning: "값이 비어 있는 셀(NULL, 빈칸, 공백)을 찾아냅니다.",
+    when: "데이터 입력 누락이나 수집 오류를 점검할 때 사용합니다.",
+    beginner: "특별한 이유가 없으면 항상 켜두는 것을 권장합니다.",
+    caution: "결측이 많은 컬럼은 통계·머신러닝 분석의 정확도를 떨어뜨릴 수 있습니다.",
+  },
+  opt_duplicate: {
+    title: "중복 데이터 탐지",
+    meaning: "모든 컬럼 값이 완전히 똑같은 행을 중복으로 찾아냅니다.",
+    when: "같은 데이터가 두 번 이상 입력되었는지 확인할 때 사용합니다.",
+    beginner: "기본으로 켜두면 안전합니다.",
+    caution: "일부 컬럼만 같은 경우는 중복으로 보지 않습니다(전체 값 일치 기준).",
+  },
+  opt_range: {
+    title: "범위 검사",
+    meaning: "숫자 값이 사용자가 정한 허용 최소~최대 범위를 벗어나는지 검사합니다.",
+    when: "'수행률은 0~100%'처럼 값의 상식적 한계가 분명할 때 사용합니다.",
+    effect: "허용 범위를 좁히면 더 엄격하게, 넓히면 느슨하게 판정합니다.",
+    beginner: "아래 '숫자 컬럼 설정'에서 컬럼별 허용값을 지정하세요.",
+    caution: "'사용'을 체크한 컬럼만 검사합니다.",
+  },
+  opt_change: {
+    title: "증감률 검사",
+    meaning: "바로 앞 행 대비 값이 몇 % 변했는지 계산해 급격한 변화를 찾습니다.",
+    when: "시간순으로 정렬된 데이터에서 갑작스러운 변화를 볼 때 유용합니다.",
+    caution: "행 순서가 시간 순이 아니면 의미가 약해집니다. 임계치(%)로 민감도를 조절하세요.",
+  },
+  opt_iqr: {
+    title: "IQR (사분위 범위)",
+    meaning: "사분위수(Q1~Q3) 기반으로 정상 범위를 정하고 그 밖의 값을 이상치로 봅니다.",
+    when: "데이터 분포를 몰라도 무난하게 쓸 수 있는 통계 기법입니다.",
+    recommend: "판정 배수(k)는 일반적으로 1.5를 사용합니다(본 프로그램은 1.5 고정).",
+    effect: "배수가 크면(예: 3.0) 아주 극단적인 값만 탐지합니다.",
+    caution: "데이터가 4건 미만이거나 값이 거의 일정하면 자동으로 건너뜁니다.",
+  },
+  opt_zscore: {
+    title: "Z-Score",
+    meaning: "값이 평균에서 몇 표준편차 떨어졌는지로 이상치를 판정합니다.",
+    when: "데이터가 대체로 정규분포(종 모양)에 가까울 때 효과적입니다.",
+    recommend: "임계치 3.0을 가장 많이 씁니다(아래 파라미터에서 조절).",
+    caution: "분포가 심하게 치우쳐 있으면 IQR 등 다른 기법이 더 적합합니다.",
+  },
+  opt_iforest: {
+    title: "Isolation Forest",
+    meaning: "무작위 분할 트리로 '쉽게 고립되는' 값을 이상치로 찾는 머신러닝 기법입니다.",
+    when: "여러 숫자 컬럼을 함께 고려해 복합적인 이상치를 찾을 때 사용합니다.",
+    recommend: "이상치 비율(contamination)로 민감도를 정합니다(아래 파라미터).",
+    caution: "결측이 있는 행은 계산에서 제외합니다.",
+  },
+  opt_lof: {
+    title: "Local Outlier Factor (LOF)",
+    meaning: "주변 이웃보다 상대적으로 밀도가 낮은(외따로 떨어진) 점을 이상치로 봅니다.",
+    when: "지역적으로 튀는 값(부분 집단 내 이상)을 찾을 때 강점이 있습니다.",
+    recommend: "이웃 수(n_neighbors)로 민감도를 조절합니다(아래 파라미터).",
+    caution: "값의 크기 차이를 없애기 위해 내부적으로 표준화 후 계산합니다.",
+  },
+  opt_dbscan: {
+    title: "DBSCAN",
+    meaning: "가까운 점끼리 군집을 만들고, 어느 군집에도 속하지 못한 점(노이즈)을 이상치로 봅니다.",
+    when: "밀집된 정상 데이터 사이에서 드문드문 떨어진 값을 찾을 때 사용합니다.",
+    recommend: "eps(이웃 거리)와 min_samples(최소 군집 크기)로 동작을 조절합니다.",
+    caution: "eps 설정에 민감합니다. 표준화된 데이터 기준으로 값을 정하세요.",
+  },
+
+  /* --- 알고리즘 파라미터(수치 입력) --- */
+  p_change: {
+    title: "증감률 임계치 (%)",
+    meaning: "앞 행 대비 변화율이 이 값(%)을 넘으면 이상으로 판정합니다.",
+    recommend: "보통 100%를 많이 사용합니다.",
+    range: "데이터 특성에 따라 50~200% 범위에서 조절합니다.",
+    effect: "낮추면 작은 변화도 이상으로 잡고, 높이면 큰 급변만 잡습니다.",
+    beginner: "잘 모르면 100으로 시작하세요.",
+  },
+  p_zscore: {
+    title: "Z-Score 임계치",
+    meaning: "평균으로부터 몇 표준편차 이상 떨어지면 이상치로 볼지 결정합니다.",
+    recommend: "일반적으로 3.0을 가장 많이 사용합니다.",
+    range: "2.5~3.5 범위를 권장합니다.",
+    effect: "값을 낮추면 이상치를 더 많이 탐지하고, 높이면 극단적인 값만 탐지합니다.",
+    beginner: "3.0을 추천합니다.",
+  },
+  p_contam: {
+    title: "Isolation Forest contamination",
+    meaning: "전체 데이터 중 이상치가 차지할 것으로 보는 비율입니다.",
+    recommend: "보통 0.01~0.1(1~10%)을 사용합니다.",
+    range: "0.001 ~ 0.5.",
+    effect: "크게 하면 더 많은 행을, 작게 하면 소수만 이상으로 판정합니다.",
+    beginner: "사전 정보가 없으면 0.05를 권장합니다.",
+    caution: "실제 이상치 비율과 크게 다르면 오탐/미탐이 늘 수 있습니다.",
+  },
+  p_neighbors: {
+    title: "LOF n_neighbors",
+    meaning: "각 점의 밀도를 계산할 때 참고하는 주변 이웃 개수입니다.",
+    recommend: "일반적으로 20을 권장합니다.",
+    range: "데이터가 적으면 10~20, 많으면 20~50 정도.",
+    effect: "너무 작으면 노이즈에 민감하고, 너무 크면 지역적 이상치를 놓칠 수 있습니다.",
+    caution: "전체 데이터 수보다 작아야 합니다(자동으로 상한 조정).",
+  },
+  p_eps: {
+    title: "DBSCAN eps",
+    meaning: "두 점을 '이웃'으로 인정하는 최대 거리입니다.",
+    when: "데이터를 표준화(정규화)한 기준으로 설정하는 것을 권장합니다.",
+    recommend: "표준화된 데이터에서는 0.3~1.0 부근을 흔히 사용합니다(기본 0.5).",
+    effect: "크게 하면 넓게 묶여 이상치가 줄고, 작게 하면 더 많은 점이 노이즈가 됩니다.",
+    caution: "데이터 스케일에 매우 민감합니다.",
+  },
+  p_minsamples: {
+    title: "DBSCAN min_samples",
+    meaning: "하나의 군집을 이루기 위한 최소 점(샘플) 개수입니다.",
+    recommend: "일반적으로 5를 사용합니다.",
+    range: "보통 3~10.",
+    effect: "크게 하면 군집 기준이 엄격해져 노이즈(이상치)가 늘어납니다.",
+    beginner: "5로 시작하세요.",
+  },
+
+  /* --- 향후 확장 예시(현재 UI 미노출, 입력 요소 추가 시 자동 동작) --- */
+  p_pca_components: {
+    title: "PCA Components",
+    meaning: "차원 축소 시 유지할 주성분(축)의 개수입니다.",
+    recommend: "설명분산비가 90~95% 이상이 되도록 선택하는 것을 권장합니다.",
+  },
+  p_kmeans_k: {
+    title: "KMeans Cluster 수 (k)",
+    meaning: "생성할 군집(그룹)의 개수입니다.",
+    recommend: "Elbow Method 또는 Silhouette Score를 참고하여 결정합니다.",
+  },
+};
+
+const InfoTooltip = (function () {
+  // 표시 순서와 라벨 정의(설정 객체에 존재하는 필드만 렌더링)
+  const FIELDS = [
+    ["meaning", "의미"], ["when", "사용 시점"], ["effect", "값의 영향"],
+    ["recommend", "권장값"], ["range", "권장 범위"], ["beginner", "초보자 추천"],
+    ["caution", "주의사항"],
+  ];
+  let tip = null, mode = null, anchor = null, timer = null;
+
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  function ensure() {
+    if (tip) return tip;
+    tip = document.createElement("div");
+    tip.className = "info-tooltip"; tip.id = "info-tooltip"; tip.setAttribute("role", "tooltip");
+    // 툴팁 위로 마우스가 올라오면 유지, 벗어나면 닫기(hover 모드)
+    tip.addEventListener("mouseenter", () => clearTimeout(timer));
+    tip.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
+    document.body.appendChild(tip);
+    return tip;
+  }
+  function buildHtml(key) {
+    const info = TOOLTIP_INFO[key]; if (!info) return "";
+    let h = '<div class="it-title">' + esc(info.title) + "</div>";
+    for (const [f, label] of FIELDS)
+      if (info[f]) h += '<div class="it-row"><span class="it-label">' + label +
+        '</span><span class="it-text">' + esc(info[f]) + "</span></div>";
+    return h;
+  }
+  // 화면 밖으로 벗어나지 않도록 자동 위치 조정(아래 우선, 공간 없으면 위로 뒤집기)
+  function place(a) {
+    const t = ensure(), r = a.getBoundingClientRect(), m = 8;
+    const tw = t.offsetWidth, th = t.offsetHeight;
+    let top = r.bottom + m;
+    if (top + th > window.innerHeight && r.top - m - th > 0) top = r.top - m - th;
+    let left = r.left + r.width / 2 - tw / 2;
+    left = Math.max(m, Math.min(left, window.innerWidth - tw - m));
+    top = Math.max(m, Math.min(top, window.innerHeight - th - m));
+    t.style.left = (left + window.scrollX) + "px";
+    t.style.top = (top + window.scrollY) + "px";
+  }
+  function show(a, key, m2) {
+    clearTimeout(timer);
+    const t = ensure(); t.innerHTML = buildHtml(key); t.classList.add("visible");
+    place(a); anchor = a; mode = m2;
+    a.setAttribute("aria-describedby", t.id);
+  }
+  function hide() {
+    if (tip) tip.classList.remove("visible");
+    if (anchor) anchor.removeAttribute("aria-describedby");
+    anchor = null; mode = null;
+  }
+  function scheduleHide() { clearTimeout(timer); timer = setTimeout(hide, 140); }
+
+  /** key 에 매핑된 ⓘ 아이콘 버튼을 생성한다(재사용 가능). */
+  function createIcon(key) {
+    const info = TOOLTIP_INFO[key];
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "info-icon"; b.textContent = "i";
+    b.setAttribute("aria-label", (info ? info.title : key) + " 설명");
+    // PC: hover / 키보드: focus
+    b.addEventListener("mouseenter", () => { if (mode !== "pinned") show(b, key, "hover"); });
+    b.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
+    b.addEventListener("focus", () => { if (mode !== "pinned") show(b, key, "hover"); });
+    b.addEventListener("blur", () => { if (mode === "hover") hide(); });
+    // 모바일/터치: click 으로 고정 토글
+    b.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (mode === "pinned" && anchor === b) hide();
+      else show(b, key, "pinned");
+    });
+    return b;
+  }
+
+  /** 화면 내 옵션/파라미터 요소를 찾아 아이콘을 자동 부착한다. */
+  function init() {
+    document.querySelectorAll(".grid-opts label, .param").forEach((c) => {
+      const input = c.querySelector("input");
+      if (!input || !TOOLTIP_INFO[input.id]) return;
+      const target = c.classList.contains("param") ? c.querySelector("label") : c;
+      target.appendChild(createIcon(input.id));
+    });
+    // 바깥 클릭/ESC 로 닫기(고정된 툴팁 포함)
+    document.addEventListener("click", (e) => {
+      if (mode === "pinned" && !e.target.closest(".info-icon") && !e.target.closest(".info-tooltip")) hide();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
+    window.addEventListener("resize", hide);
+    window.addEventListener("scroll", () => { if (anchor) place(anchor); }, true);
+  }
+  return { init, createIcon };
+})();
+
+InfoTooltip.init();
+window.__infoTooltip = InfoTooltip;
 </script>
 </body>
 </html>
