@@ -94,6 +94,25 @@
   .info-tooltip .it-row{ display:flex; gap:8px; margin-top:4px; }
   .info-tooltip .it-label{ flex:0 0 62px; color:#9fb3c8; font-size:11.5px; }
   .info-tooltip .it-text{ flex:1; }
+  /* Drag & Drop 업로드 영역 */
+  .dropzone{
+    margin-top:12px; border:2px dashed #b6c2d2; border-radius:10px;
+    padding:22px 16px; text-align:center; cursor:pointer; background:#fbfcfe;
+    transition:background .15s, border-color .15s;
+  }
+  .dropzone:hover{ border-color:var(--accent); }
+  .dropzone:focus-visible{ outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(47,111,237,.25); }
+  .dropzone.dragover{ background:#eaf1ff; border-color:var(--accent); }
+  .dropzone.busy{ opacity:.75; cursor:progress; }
+  .dz-icon{ font-size:24px; color:var(--accent); line-height:1; }
+  .dz-text{ margin-top:6px; font-weight:600; }
+  .dz-sub{ margin-top:3px; }
+  .dz-loading{ margin-top:10px; display:inline-flex; align-items:center; gap:8px; color:var(--accent); font-weight:600; }
+  .spinner{ width:16px; height:16px; border:2px solid #cdd9ea; border-top-color:var(--accent);
+    border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .dz-error{ margin-top:8px; color:var(--warn); font-weight:600; font-size:13px; }
 </style>
 </head>
 <body>
@@ -106,12 +125,25 @@
 
   <!-- ① 파일 선택 -->
   <div class="panel">
-    <h2><span class="badge">1</span> 파일 선택 (xlsx / xls / csv)</h2>
+    <h2><span class="badge">1</span> 파일 선택 (csv / xlsx)</h2>
     <div class="row">
       <button id="btnPick">파일 선택</button>
-      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" class="hidden">
       <span id="fileName" class="filecue">선택된 파일이 없습니다.</span>
     </div>
+
+    <!-- Drag & Drop 업로드 영역 -->
+    <div id="dropZone" class="dropzone" tabindex="0" role="button"
+         aria-label="파일 업로드 영역. CSV 또는 XLSX 파일을 드래그하여 놓거나 클릭하여 업로드합니다.">
+      <div class="dz-icon" aria-hidden="true">⬆</div>
+      <div class="dz-text">CSV 또는 XLSX 파일을 여기에 드래그하거나 클릭하여 업로드</div>
+      <div class="dz-sub muted">허용 형식: .csv, .xlsx (구형 .xls 도 지원) · 최대 50MB</div>
+      <div id="dzLoading" class="dz-loading hidden" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span><span>업로드 중...</span>
+      </div>
+    </div>
+    <div id="dzError" class="dz-error hidden" role="alert" aria-live="assertive"></div>
+
     <div id="fileInfo" class="note"></div>
   </div>
 
@@ -382,6 +414,9 @@ const Zip = (function () {
       const lhExtraLen = dv.getUint16(localOff + 28, true);
       const dataStart = localOff + 30 + lhNameLen + lhExtraLen;
       const comp = bytes.subarray(dataStart, dataStart + compSize);
+      // zip-bomb 방어: 선언된 원본 크기가 비정상적으로 크면 거부(압축 해제 시 메모리 폭증 방지)
+      if (uncompSize > 300 * 1024 * 1024)
+        throw new Error("압축 해제 크기가 너무 큽니다(손상되었거나 비정상 파일).");
       let data;
       if (method === 0) data = comp.slice();
       else if (method === 8) data = Inflate.inflateRaw(comp, uncompSize);
@@ -1270,30 +1305,124 @@ const XlsxWriter = (function () {
   function setStatus(msg) { $("status").textContent = msg; }
   function setProgress(pct) { $("progressBar").style.width = pct + "%"; }
 
-  // 파일 선택
-  $("btnPick").addEventListener("click", () => $("fileInput").click());
-  $("fileInput").addEventListener("change", async (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    $("fileName").textContent = file.name; $("fileName").classList.remove("filecue");
+  // ----- 업로드 설정/상태 -----
+  const ALLOWED_EXT = ["csv", "xlsx", "xls"];   // xls 는 기존 기능 유지를 위해 포함
+  const MAX_FILE_SIZE = 50 * 1024 * 1024;       // 50MB
+  let isUploading = false;                        // 중복 업로드 방지 플래그
+
+  function setDzError(msg) {
+    const el = $("dzError");
+    if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = "⚠ " + msg; el.classList.remove("hidden");
+  }
+  function setUploading(on) {
+    isUploading = on;
+    $("dzLoading").classList.toggle("hidden", !on);
+    $("dropZone").classList.toggle("busy", on);
+    $("btnPick").disabled = on;
+    $("btnRun").disabled = on;
+  }
+  // 중복/특수 컬럼명 안전화: 빈 이름 보정 + 중복 시 접미사 부여
+  function dedupeColumns(cols) {
+    const seen = new Map();
+    return cols.map((c, i) => {
+      let name = (c === null || c === undefined || String(c).trim() === "") ? ("열" + (i + 1)) : String(c);
+      if (seen.has(name)) { const n = seen.get(name) + 1; seen.set(name, n); name = name + "_" + n; }
+      else seen.set(name, 1);
+      return name;
+    });
+  }
+
+  /** 검증 → 로딩 → 읽기 → 렌더까지 담당하는 공통 업로드 처리기(버튼/드롭 공용). */
+  async function handleFile(file) {
+    if (!file) return;
+    if (isUploading) { setDzError("이미 파일을 처리 중입니다. 잠시 후 다시 시도하세요."); return; }
+    setDzError("");
+
+    // --- 확장자/크기 사전 검증 ---
+    const ext = (file.name.indexOf(".") >= 0 ? file.name.split(".").pop() : "").toLowerCase();
+    if (!ALLOWED_EXT.includes(ext)) {
+      setDzError("허용되지 않는 파일 형식입니다: " + (ext ? "." + ext : "(확장자 없음)") + " · csv, xlsx 만 업로드할 수 있습니다.");
+      return;
+    }
+    if (file.size === 0) { setDzError("빈 파일입니다. 내용이 있는 파일을 선택하세요."); return; }
+    if (file.size > MAX_FILE_SIZE) {
+      setDzError("파일이 너무 큽니다(최대 50MB). 현재 " + (file.size / 1048576).toFixed(1) + "MB");
+      return;
+    }
+
+    setUploading(true);
     setStatus("파일 읽는 중..."); setProgress(0);
+    $("fileName").textContent = file.name; $("fileName").classList.remove("filecue");
     try {
+      await new Promise((r) => setTimeout(r, 0)); // 로딩 표시가 그려질 기회를 준다
+      // 매직바이트로 실제 형식 확인(확장자 위조/잘못된 MIME 방어)
+      const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+      const isZip = head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04; // "PK.."
+      const isOle = head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0; // 구형 .xls(OLE2)
+      if (ext === "csv" && (isZip || isOle))
+        throw new Error("확장자는 .csv 이지만 실제 내용은 엑셀 파일로 보입니다. .xlsx 로 다시 저장한 뒤 시도하세요.");
+      if (ext === "xlsx" && !isZip)
+        throw new Error("올바른 xlsx(Excel) 파일이 아닙니다. 파일이 손상되었거나 확장자가 실제 형식과 다릅니다.");
       const raw = await readFile(file);
-      table = new TableWrapper(raw.columns, raw.rows);
+      const columns = dedupeColumns(raw.columns);
+      table = new TableWrapper(columns, raw.rows);
       const infos = ColumnAnalyzer.analyze(table);
       numericConfigs = ColumnAnalyzer.buildNumericConfigs(table, infos);
       renderNumericTable();
-      const typeSummary = infos.map(i => i.name + "(" + i.type + ")").join(", ");
+      const typeSummary = infos.map((i) => i.name + "(" + i.type + ")").join(", ");
       $("fileInfo").textContent = "행 " + table.rows.length + " × 열 " + table.columns.length +
         " · 숫자 컬럼 " + numericConfigs.length + "개 · 타입: " + typeSummary;
       $("outName").value = file.name.replace(/\.[^.]+$/, "") + "_result.xlsx";
-      setStatus("파일 로드 완료. [분석 시작] 을 누르세요.");
-      $("resultPanel").classList.add("hidden");
+      $("resultPanel").classList.add("hidden"); lastResult = null;
+      if (table.rows.length === 0)
+        setStatus("로드 완료: 데이터 행이 없습니다(헤더만 존재). 분석할 데이터가 없습니다.");
+      else
+        setStatus("파일 로드 완료. [분석 시작] 을 누르세요.");
     } catch (err) {
       console.error(err);
-      alert("파일 읽기 실패: " + err.message);
+      setDzError("파일 읽기 실패: " + (err && err.message ? err.message : err));
       setStatus("파일 읽기 실패");
+      // 실패 시 상태 초기화(부분 반영 방지)
+      table = null; numericConfigs = []; renderNumericTable();
+      $("fileInfo").textContent = ""; $("fileName").textContent = "선택된 파일이 없습니다.";
+      $("fileName").classList.add("filecue");
+    } finally {
+      setUploading(false);
+      $("fileInput").value = ""; // 같은 파일 재선택 시에도 change 가 발생하도록 초기화
     }
+  }
+
+  /** 여러 개가 들어오면 첫 번째만 사용한다. */
+  function handleFiles(fileList) {
+    if (!fileList || !fileList.length) return;
+    if (fileList.length > 1) setDzError("여러 파일 중 첫 번째 파일만 사용합니다: " + fileList[0].name);
+    handleFile(fileList[0]);
+  }
+
+  // 버튼/파일 입력
+  $("btnPick").addEventListener("click", () => { if (!isUploading) $("fileInput").click(); });
+  $("fileInput").addEventListener("change", (e) => { handleFiles(e.target.files); e.target.value = ""; });
+
+  // ----- Drag & Drop -----
+  const dz = $("dropZone");
+  let dragDepth = 0; // 자식 요소 위 이동 시 dragleave 깜빡임 방지용 카운터
+  dz.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; dz.classList.add("dragover"); });
+  dz.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = isUploading ? "none" : "copy"; });
+  dz.addEventListener("dragleave", () => { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; dz.classList.remove("dragover"); } });
+  dz.addEventListener("drop", (e) => {
+    e.preventDefault(); dragDepth = 0; dz.classList.remove("dragover");
+    if (isUploading) { setDzError("이미 파일을 처리 중입니다. 잠시 후 다시 시도하세요."); return; }
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length) handleFiles(dt.files);
+    else setDzError("드롭한 항목에서 파일을 찾을 수 없습니다. 파일을 드래그했는지 확인하세요.");
   });
+  dz.addEventListener("click", () => { if (!isUploading) $("fileInput").click(); });
+  dz.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!isUploading) $("fileInput").click(); } });
+
+  // 영역 밖에 파일을 떨어뜨렸을 때 브라우저가 파일을 열어버리는 것을 방지(데이터 유실/이탈 방지)
+  window.addEventListener("dragover", (e) => { e.preventDefault(); });
+  window.addEventListener("drop", (e) => { e.preventDefault(); });
 
   // 간단한 Table 래퍼 (columns/rows 보관)
   function TableWrapper(columns, rows) { this.columns = columns; this.rows = rows; }
@@ -1304,7 +1433,7 @@ const XlsxWriter = (function () {
     numericConfigs.forEach((cfg, i) => {
       const tr = document.createElement("tr");
       tr.innerHTML =
-        "<td>" + cfg.name + "</td>" +
+        "<td>" + escapeHtml(cfg.name) + "</td>" +
         "<td>" + Values.fmtNum(cfg.actualMin) + "</td>" +
         "<td>" + Values.fmtNum(cfg.actualMax) + "</td>" +
         '<td><input type="number" step="any" value="' + cfg.allowMin + '" data-i="' + i + '" data-k="allowMin"></td>' +
@@ -1363,7 +1492,7 @@ const XlsxWriter = (function () {
     const cols = result.table.columns.concat([FLAG_COL, REASON_COL]);
     const thead = $("resultTable").querySelector("thead");
     const tbody = $("resultTable").querySelector("tbody");
-    thead.innerHTML = "<tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr>";
+    thead.innerHTML = "<tr>" + cols.map(c => "<th>" + escapeHtml(c) + "</th>").join("") + "</tr>";
     let html = "", shown = 0; const LIMIT = 300;
     for (let r = 0; r < result.table.rows.length; r++) {
       const isAnom = result.flags[r] === "이상";
@@ -1398,6 +1527,7 @@ const XlsxWriter = (function () {
 
   // 테스트 편의를 위해 일부 내부 기능을 전역에 노출
   window.__anomaly = { readFile, runAnalysis, XlsxWriter, ColumnAnalyzer, Zip, Values, TableWrapper };
+  window.__upload = { handleFile, handleFiles, dedupeColumns, escapeHtml };
 })();
 
 /* =====================================================================
