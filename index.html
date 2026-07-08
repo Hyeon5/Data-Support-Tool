@@ -1,0 +1,1642 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 기반 데이터 이상치 탐지 프로그램</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --line:#dfe3e8; --text:#1f2933;
+    --muted:#616e7c; --accent:#2f6fed; --accent-dark:#1f52c0;
+    --anomaly:#FFF2CC; --ok:#2e7d32; --warn:#b23c17;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:"Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+    background:var(--bg); color:var(--text); font-size:14px; line-height:1.5;
+  }
+  header{
+    background:linear-gradient(135deg,#2f6fed,#1f52c0); color:#fff;
+    padding:18px 24px;
+  }
+  header h1{margin:0; font-size:20px;}
+  header p{margin:4px 0 0; font-size:12px; opacity:.85;}
+  .wrap{max-width:1080px; margin:0 auto; padding:20px;}
+  .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; margin-bottom:16px;
+  }
+  .panel h2{
+    margin:0 0 12px; font-size:15px; display:flex; align-items:center; gap:8px;
+    border-bottom:1px solid var(--line); padding-bottom:8px;
+  }
+  .badge{
+    background:var(--accent); color:#fff; border-radius:50%; width:22px; height:22px;
+    display:inline-flex; align-items:center; justify-content:center; font-size:12px;
+  }
+  .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center;}
+  button{
+    background:var(--accent); color:#fff; border:0; border-radius:6px;
+    padding:9px 16px; font-size:14px; cursor:pointer;
+  }
+  button:hover{background:var(--accent-dark);}
+  button:disabled{background:#a9b4c0; cursor:not-allowed;}
+  button.secondary{background:#e4e9f2; color:#1f2933;}
+  button.secondary:hover{background:#d3dbe8;}
+  input[type=text],input[type=number]{
+    border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-size:13px;
+  }
+  .grid-opts{display:grid; grid-template-columns:repeat(3,1fr); gap:8px 16px;}
+  .grid-opts label{display:flex; align-items:center; gap:6px; cursor:pointer;}
+  .params{display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px;}
+  .param{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .param label{color:var(--muted);}
+  .param input{width:120px;}
+  .muted{color:var(--muted); font-size:12px;}
+  table{border-collapse:collapse; width:100%; font-size:12.5px;}
+  th,td{border:1px solid var(--line); padding:5px 8px; text-align:left; white-space:nowrap;}
+  th{background:#eef2f7; position:sticky; top:0;}
+  .tbl-scroll{max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:8px;}
+  .num-config input{width:110px;}
+  tr.anomaly td{background:var(--anomaly);}
+  .progress-outer{background:#e4e9f2; border-radius:20px; height:16px; overflow:hidden;}
+  .progress-inner{background:var(--accent); height:100%; width:0%; transition:width .2s;}
+  #status{margin-top:8px; font-size:13px; color:var(--muted); text-align:center;}
+  .summary{display:flex; gap:24px; flex-wrap:wrap; margin-bottom:10px;}
+  .summary .stat{background:#eef2f7; border-radius:8px; padding:10px 16px;}
+  .summary .stat b{font-size:20px; display:block;}
+  .hidden{display:none;}
+  .filecue{color:var(--muted); font-style:italic;}
+  .note{font-size:12px; color:var(--muted); margin-top:6px;}
+  .runbar{position:sticky; bottom:0; background:var(--panel); border-top:1px solid var(--line);
+    padding:14px 18px; border-radius:0 0 10px 10px;}
+  /* Info(ⓘ) 아이콘 + 툴팁 */
+  .info-icon{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:16px; height:16px; margin-left:5px; padding:0; flex:0 0 auto;
+    border:0; border-radius:50%; background:#c7d2e0; color:#1f2933;
+    font-size:11px; font-style:italic; font-weight:700;
+    font-family:Georgia,"Times New Roman",serif; line-height:1;
+    cursor:help; vertical-align:middle;
+  }
+  .info-icon:hover{ background:var(--accent); color:#fff; }
+  .info-icon:focus-visible{ outline:none; background:var(--accent); color:#fff;
+    box-shadow:0 0 0 3px rgba(47,111,237,.35); }
+  .param label{ display:inline-flex; align-items:center; }
+  .info-tooltip{
+    position:absolute; z-index:1000; max-width:320px;
+    background:#1f2933; color:#e7edf3; border-radius:8px; padding:11px 13px;
+    font-size:12.5px; line-height:1.55; box-shadow:0 8px 28px rgba(0,0,0,.28);
+    opacity:0; visibility:hidden; pointer-events:none; transition:opacity .12s ease;
+  }
+  .info-tooltip.visible{ opacity:1; visibility:visible; pointer-events:auto; }
+  .info-tooltip .it-title{ font-weight:700; font-size:13px; color:#fff; margin-bottom:6px; }
+  .info-tooltip .it-row{ display:flex; gap:8px; margin-top:4px; }
+  .info-tooltip .it-label{ flex:0 0 62px; color:#9fb3c8; font-size:11.5px; }
+  .info-tooltip .it-text{ flex:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>AI 기반 데이터 이상치 탐지 프로그램</h1>
+  <p>내부망(오프라인) 환경 · 설치 불필요 · 단일 HTML 파일로 브라우저에서 실행</p>
+</header>
+
+<div class="wrap">
+
+  <!-- ① 파일 선택 -->
+  <div class="panel">
+    <h2><span class="badge">1</span> 파일 선택 (xlsx / xls / csv)</h2>
+    <div class="row">
+      <button id="btnPick">파일 선택</button>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+      <span id="fileName" class="filecue">선택된 파일이 없습니다.</span>
+    </div>
+    <div id="fileInfo" class="note"></div>
+  </div>
+
+  <!-- ② 분석 옵션 -->
+  <div class="panel">
+    <h2><span class="badge">2</span> 분석 옵션</h2>
+    <div class="grid-opts">
+      <label><input type="checkbox" id="opt_missing" checked> 결측치 탐지</label>
+      <label><input type="checkbox" id="opt_duplicate" checked> 중복 데이터 탐지</label>
+      <label><input type="checkbox" id="opt_range" checked> 범위 검사</label>
+      <label><input type="checkbox" id="opt_change" checked> 증감률 검사</label>
+      <label><input type="checkbox" id="opt_iqr" checked> IQR</label>
+      <label><input type="checkbox" id="opt_zscore" checked> Z-Score</label>
+      <label><input type="checkbox" id="opt_iforest" checked> Isolation Forest</label>
+      <label><input type="checkbox" id="opt_lof" checked> Local Outlier Factor (LOF)</label>
+      <label><input type="checkbox" id="opt_dbscan" checked> DBSCAN</label>
+    </div>
+  </div>
+
+  <!-- 알고리즘 파라미터 -->
+  <div class="panel">
+    <h2>알고리즘 파라미터</h2>
+    <div class="params">
+      <div class="param"><label>증감률 임계치 (%)</label><input type="number" id="p_change" value="100" step="10" min="0"></div>
+      <div class="param"><label>Z-Score 임계치</label><input type="number" id="p_zscore" value="3.0" step="0.1" min="0.1"></div>
+      <div class="param"><label>Isolation Forest contamination</label><input type="number" id="p_contam" value="0.05" step="0.01" min="0.001" max="0.5"></div>
+      <div class="param"><label>LOF n_neighbors</label><input type="number" id="p_neighbors" value="20" step="1" min="1"></div>
+      <div class="param"><label>DBSCAN eps</label><input type="number" id="p_eps" value="0.5" step="0.1" min="0.01"></div>
+      <div class="param"><label>DBSCAN min_samples</label><input type="number" id="p_minsamples" value="5" step="1" min="1"></div>
+    </div>
+  </div>
+
+  <!-- 숫자 컬럼 설정 -->
+  <div class="panel">
+    <h2>숫자 컬럼 설정 (범위 검사)</h2>
+    <p class="muted">파일을 읽으면 숫자 컬럼이 자동 추출됩니다. 허용 최소/최대값을 수정하고 '사용'을 체크하세요.</p>
+    <div class="tbl-scroll">
+      <table id="numTable" class="num-config">
+        <thead><tr>
+          <th>컬럼명</th><th>실제 최소</th><th>실제 최대</th>
+          <th>허용 최소</th><th>허용 최대</th><th>사용</th>
+        </tr></thead>
+        <tbody id="numTableBody">
+          <tr><td colspan="6" class="muted">파일을 먼저 선택하세요.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ⑤ 결과 저장 -->
+  <div class="panel">
+    <h2><span class="badge">5</span> 결과 저장 (파일명)</h2>
+    <div class="row">
+      <input type="text" id="outName" value="anomaly_result.xlsx" style="min-width:320px;">
+      <span class="muted">분석 완료 후 아래 [결과 다운로드] 버튼으로 Excel 파일을 내려받습니다.</span>
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="panel hidden" id="resultPanel">
+    <h2>분석 결과</h2>
+    <div class="summary" id="summary"></div>
+    <div class="row" style="margin-bottom:10px;">
+      <button id="btnDownload">결과 다운로드 (Excel)</button>
+      <label style="display:flex;align-items:center;gap:6px;" class="muted">
+        <input type="checkbox" id="onlyAnomaly"> 미리보기에 이상 행만 표시
+      </label>
+    </div>
+    <div class="tbl-scroll">
+      <table id="resultTable"><thead></thead><tbody></tbody></table>
+    </div>
+    <div class="note" id="previewNote"></div>
+  </div>
+
+  <!-- ③④ 실행 / 진행률 -->
+  <div class="panel runbar">
+    <div id="status">대기 중</div>
+    <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
+    <div class="row" style="margin-top:12px; justify-content:center;">
+      <button id="btnRun" style="min-width:200px; padding:12px 20px;">분석 시작</button>
+    </div>
+  </div>
+
+  <p class="muted" style="text-align:center;">
+    ※ 모든 처리는 브라우저 내부에서 수행되며 외부로 데이터가 전송되지 않습니다.
+  </p>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+ * AI 기반 데이터 이상치 탐지 프로그램 (단일 HTML, 외부 라이브러리 미사용)
+ *
+ * 구성:
+ *   1) 압축/압축해제(Inflate) 및 ZIP 입출력
+ *   2) 파일 리더 (xlsx / xls / csv)
+ *   3) 값 헬퍼 및 컬럼 타입 자동 분석
+ *   4) 이상치 탐지 알고리즘 9종 (규칙/통계/머신러닝)
+ *   5) 분석 오케스트레이션
+ *   6) 결과 Excel 작성기 (2시트 + 이상 행 노란색)
+ *   7) UI 연동
+ * ===================================================================== */
+
+/* =====================================================================
+ * 1. 압축 해제 (raw DEFLATE) — 실제 xlsx 는 DEFLATE 로 압축되어 있으므로 필요.
+ *    tinf(tiny inflate) 알고리즘의 순수 JS 포팅. 외부 의존성 없음.
+ * ===================================================================== */
+const Inflate = (function () {
+  function Tree() { this.table = new Uint16Array(16); this.trans = new Uint16Array(288); }
+  function Data(src, dst) {
+    this.s = src; this.i = 0; this.t = 0; this.bitcount = 0;
+    this.dest = dst; this.destLen = 0; this.ltree = new Tree(); this.dtree = new Tree();
+  }
+  const sltree = new Tree(), sdtree = new Tree();
+  const length_bits = new Uint8Array(30), length_base = new Uint16Array(30);
+  const dist_bits = new Uint8Array(30), dist_base = new Uint16Array(30);
+  const clcidx = new Uint8Array([16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15]);
+  const code_tree = new Tree(); const lengths = new Uint8Array(288 + 32);
+  const offs = new Uint16Array(16);
+
+  function buildBitsBase(bits, base, delta, first) {
+    let i, sum;
+    for (i = 0; i < delta; ++i) bits[i] = 0;
+    for (i = 0; i < 30 - delta; ++i) bits[i + delta] = (i / delta) | 0;
+    for (sum = first, i = 0; i < 30; ++i) { base[i] = sum; sum += 1 << bits[i]; }
+  }
+  function buildFixedTrees(lt, dt) {
+    let i;
+    for (i = 0; i < 7; ++i) lt.table[i] = 0;
+    lt.table[7] = 24; lt.table[8] = 152; lt.table[9] = 112;
+    for (i = 0; i < 24; ++i) lt.trans[i] = 256 + i;
+    for (i = 0; i < 144; ++i) lt.trans[24 + i] = i;
+    for (i = 0; i < 8; ++i) lt.trans[24 + 144 + i] = 280 + i;
+    for (i = 0; i < 112; ++i) lt.trans[24 + 144 + 8 + i] = 144 + i;
+    for (i = 0; i < 5; ++i) dt.table[i] = 0;
+    dt.table[5] = 32;
+    for (i = 0; i < 32; ++i) dt.trans[i] = i;
+  }
+  function buildTree(t, lens, off, num) {
+    let i, sum;
+    for (i = 0; i < 16; ++i) t.table[i] = 0;
+    for (i = 0; i < num; ++i) t.table[lens[off + i]]++;
+    t.table[0] = 0;
+    for (sum = 0, i = 0; i < 16; ++i) { offs[i] = sum; sum += t.table[i]; }
+    for (i = 0; i < num; ++i) if (lens[off + i]) t.trans[offs[lens[off + i]]++] = i;
+  }
+  function getBit(d) {
+    if (!d.bitcount--) { d.t = d.s[d.i++]; d.bitcount = 7; }
+    const bit = d.t & 1; d.t >>>= 1; return bit;
+  }
+  function readBits(d, num, base) {
+    if (!num) return base;
+    while (d.bitcount < 24) { d.t |= d.s[d.i++] << d.bitcount; d.bitcount += 8; }
+    const val = d.t & (0xffff >>> (16 - num));
+    d.t >>>= num; d.bitcount -= num; return val + base;
+  }
+  function decodeSymbol(d, t) {
+    while (d.bitcount < 24) { d.t |= d.s[d.i++] << d.bitcount; d.bitcount += 8; }
+    let sum = 0, cur = 0, len = 0, tag = d.t;
+    do { cur = 2 * cur + (tag & 1); tag >>>= 1; ++len; sum += t.table[len]; cur -= t.table[len]; }
+    while (cur >= 0);
+    d.t = tag; d.bitcount -= len; return t.trans[sum + cur];
+  }
+  function decodeTrees(d, lt, dt) {
+    let hlit, hdist, hclen, i, num, length;
+    hlit = readBits(d, 5, 257); hdist = readBits(d, 5, 1); hclen = readBits(d, 4, 4);
+    for (i = 0; i < 19; ++i) lengths[i] = 0;
+    for (i = 0; i < hclen; ++i) lengths[clcidx[i]] = readBits(d, 3, 0);
+    buildTree(code_tree, lengths, 0, 19);
+    for (num = 0; num < hlit + hdist;) {
+      const sym = decodeSymbol(d, code_tree);
+      switch (sym) {
+        case 16: { const prev = lengths[num - 1]; for (length = readBits(d, 2, 3); length; --length) lengths[num++] = prev; break; }
+        case 17: for (length = readBits(d, 3, 3); length; --length) lengths[num++] = 0; break;
+        case 18: for (length = readBits(d, 7, 11); length; --length) lengths[num++] = 0; break;
+        default: lengths[num++] = sym; break;
+      }
+    }
+    buildTree(lt, lengths, 0, hlit);
+    buildTree(dt, lengths, hlit, hdist);
+  }
+  function inflateBlockData(d, lt, dt) {
+    while (1) {
+      let sym = decodeSymbol(d, lt);
+      if (sym === 256) return;
+      if (sym < 256) { d.dest[d.destLen++] = sym; }
+      else {
+        sym -= 257;
+        const length = readBits(d, length_bits[sym], length_base[sym]);
+        const dist = decodeSymbol(d, dt);
+        const off2 = d.destLen - readBits(d, dist_bits[dist], dist_base[dist]);
+        for (let i = off2; i < off2 + length; ++i) d.dest[d.destLen++] = d.dest[i];
+      }
+    }
+  }
+  function inflateUncompressed(d) {
+    while (d.bitcount > 8) { d.i--; d.bitcount -= 8; }
+    let length = d.s[d.i + 1]; length = 256 * length + d.s[d.i];
+    let inv = d.s[d.i + 3]; inv = 256 * inv + d.s[d.i + 2];
+    if (length !== (~inv & 0xffff)) throw new Error("Inflate: length mismatch");
+    d.i += 4;
+    for (let i = length; i; --i) d.dest[d.destLen++] = d.s[d.i++];
+    d.bitcount = 0;
+  }
+  buildFixedTrees(sltree, sdtree);
+  buildBitsBase(length_bits, length_base, 4, 3);
+  buildBitsBase(dist_bits, dist_base, 2, 1);
+  length_bits[28] = 0; length_base[28] = 258;
+
+  /** raw DEFLATE 스트림을 압축 해제한다. destLen = 원본 크기(ZIP 헤더에서 취득). */
+  function inflateRaw(source, destLen) {
+    const d = new Data(source, new Uint8Array(destLen));
+    let bfinal;
+    do {
+      bfinal = getBit(d);
+      const btype = readBits(d, 2, 0);
+      if (btype === 0) inflateUncompressed(d);
+      else if (btype === 1) inflateBlockData(d, sltree, sdtree);
+      else if (btype === 2) { decodeTrees(d, d.ltree, d.dtree); inflateBlockData(d, d.ltree, d.dtree); }
+      else throw new Error("Inflate: unknown block type");
+    } while (!bfinal);
+    return d.destLen === d.dest.length ? d.dest : d.dest.subarray(0, d.destLen);
+  }
+  return { inflateRaw };
+})();
+
+/* =====================================================================
+ * 1-b. ZIP 입출력 (읽기: STORED/DEFLATE, 쓰기: STORED 무압축)
+ * ===================================================================== */
+const Zip = (function () {
+  const CRC_TABLE = (function () {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    let c = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  /** ZIP 바이트를 해석하여 {파일명: Uint8Array} 맵을 반환한다. */
+  function read(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let eocd = -1;
+    for (let i = bytes.length - 22; i >= 0; i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new Error("ZIP: EOCD 를 찾을 수 없습니다.");
+    const count = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const files = {};
+    for (let n = 0; n < count; n++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const method = dv.getUint16(p + 10, true);
+      const compSize = dv.getUint32(p + 20, true);
+      const uncompSize = dv.getUint32(p + 24, true);
+      const nameLen = dv.getUint16(p + 28, true);
+      const extraLen = dv.getUint16(p + 30, true);
+      const commentLen = dv.getUint16(p + 32, true);
+      const localOff = dv.getUint32(p + 42, true);
+      const name = new TextDecoder("utf-8").decode(bytes.subarray(p + 46, p + 46 + nameLen));
+      const lhNameLen = dv.getUint16(localOff + 26, true);
+      const lhExtraLen = dv.getUint16(localOff + 28, true);
+      const dataStart = localOff + 30 + lhNameLen + lhExtraLen;
+      const comp = bytes.subarray(dataStart, dataStart + compSize);
+      let data;
+      if (method === 0) data = comp.slice();
+      else if (method === 8) data = Inflate.inflateRaw(comp, uncompSize);
+      else throw new Error("ZIP: 지원하지 않는 압축 방식 " + method);
+      files[name] = data;
+      p += 46 + nameLen + extraLen + commentLen;
+    }
+    return files;
+  }
+
+  /** [{name, data:Uint8Array}] 를 STORED(무압축) ZIP 바이트로 만든다. */
+  function write(entries) {
+    const enc = new TextEncoder();
+    const localParts = [], central = [];
+    let offset = 0;
+    for (const f of entries) {
+      const nameBytes = enc.encode(f.name);
+      const crc = crc32(f.data), size = f.data.length;
+      const lh = new Uint8Array(30 + nameBytes.length);
+      const dv = new DataView(lh.buffer);
+      dv.setUint32(0, 0x04034b50, true);
+      dv.setUint16(4, 20, true); dv.setUint16(6, 0x0800, true); // UTF-8 flag
+      dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0x21, true);
+      dv.setUint32(14, crc, true); dv.setUint32(18, size, true); dv.setUint32(22, size, true);
+      dv.setUint16(26, nameBytes.length, true); dv.setUint16(28, 0, true);
+      lh.set(nameBytes, 30);
+      localParts.push(lh, f.data);
+
+      const cd = new Uint8Array(46 + nameBytes.length);
+      const cdv = new DataView(cd.buffer);
+      cdv.setUint32(0, 0x02014b50, true);
+      cdv.setUint16(4, 20, true); cdv.setUint16(6, 20, true);
+      cdv.setUint16(8, 0x0800, true); cdv.setUint16(10, 0, true);
+      cdv.setUint16(12, 0, true); cdv.setUint16(14, 0x21, true);
+      cdv.setUint32(16, crc, true); cdv.setUint32(20, size, true); cdv.setUint32(24, size, true);
+      cdv.setUint16(28, nameBytes.length, true);
+      cdv.setUint32(42, offset, true);
+      cd.set(nameBytes, 46);
+      central.push(cd);
+      offset += lh.length + size;
+    }
+    let centralSize = 0; central.forEach(c => centralSize += c.length);
+    const eocd = new Uint8Array(22);
+    const edv = new DataView(eocd.buffer);
+    edv.setUint32(0, 0x06054b50, true);
+    edv.setUint16(8, entries.length, true); edv.setUint16(10, entries.length, true);
+    edv.setUint32(12, centralSize, true); edv.setUint32(16, offset, true);
+
+    const total = offset + centralSize + 22;
+    const out = new Uint8Array(total);
+    let pos = 0;
+    for (const part of localParts) { out.set(part, pos); pos += part.length; }
+    for (const c of central) { out.set(c, pos); pos += c.length; }
+    out.set(eocd, pos);
+    return out;
+  }
+  return { read, write, crc32 };
+})();
+
+/* =====================================================================
+ * 2. 값 헬퍼 (결측 판별, 숫자/날짜 변환, 포맷)
+ * ===================================================================== */
+const Values = (function () {
+  const DATE_FORMATS_RE = [
+    /^\d{4}-\d{1,2}-\d{1,2}$/, /^\d{4}\/\d{1,2}\/\d{1,2}$/, /^\d{4}\.\d{1,2}\.\d{1,2}$/,
+    /^\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(:\d{2})?$/
+  ];
+  function isMissing(v) {
+    if (v === null || v === undefined) return true;
+    if (typeof v === "number" && Number.isNaN(v)) return true;
+    if (typeof v === "string" && v.trim() === "") return true;
+    return false;
+  }
+  function toNumber(v) {
+    if (typeof v === "boolean") return null;
+    if (typeof v === "number") return Number.isNaN(v) ? null : v;
+    if (v instanceof Date) return null;
+    if (typeof v === "string") {
+      const t = v.trim().replace(/,/g, "");
+      if (t === "") return null;
+      // 순수 숫자 형태만 허용 (지수 포함)
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return null;
+      const n = Number(t);
+      return Number.isNaN(n) ? null : n;
+    }
+    return null;
+  }
+  function toDate(v) {
+    if (v instanceof Date) return v;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t === "") return null;
+      if (!DATE_FORMATS_RE.some(re => re.test(t))) return null;
+      const d = new Date(t.replace(/\./g, "-").replace(/\//g, "-"));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+  function fmtDate(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    const base = d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+    if (d.getUTCHours() || d.getUTCMinutes() || d.getUTCSeconds())
+      return base + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
+    return base;
+  }
+  function cellText(v) {
+    if (isMissing(v)) return "";
+    if (v instanceof Date) return fmtDate(v);
+    return String(v);
+  }
+  /** 사유 문자열용 숫자 포맷: 정수는 소수점 제거, 소수는 뒤쪽 0 제거. */
+  function fmtNum(x) {
+    const n = Number(x);
+    if (!isFinite(n)) return String(x);
+    if (Number.isInteger(n)) return String(n);
+    return n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  }
+  return { isMissing, toNumber, toDate, cellText, fmtNum };
+})();
+
+/* =====================================================================
+ * 3. 파일 리더 (xlsx / xls / csv) — Table {columns, rows} 반환
+ * ===================================================================== */
+
+// Excel 시리얼 날짜 -> JS Date (UTC 기준, 1899-12-30 epoch)
+function excelSerialToDate(serial) {
+  const ms = Math.round((serial - 25569) * 86400 * 1000);
+  return new Date(ms);
+}
+// 열 문자(A, B, ... AA)를 0-based 인덱스로
+function colLettersToIndex(letters) {
+  let idx = 0;
+  for (let i = 0; i < letters.length; i++) idx = idx * 26 + (letters.charCodeAt(i) - 64);
+  return idx - 1;
+}
+
+const XlsxReader = (function () {
+  const parser = new DOMParser();
+
+  function textOf(el) {
+    // <t> 텍스트(들)을 이어붙임 (rich text 런 포함)
+    return el ? el.textContent : "";
+  }
+
+  function parseSharedStrings(xml) {
+    if (!xml) return [];
+    const doc = parser.parseFromString(xml, "application/xml");
+    const sis = doc.getElementsByTagName("si");
+    const result = [];
+    for (let i = 0; i < sis.length; i++) {
+      // si 안의 모든 <t> 를 이어붙인다.
+      const ts = sis[i].getElementsByTagName("t");
+      let s = "";
+      for (let j = 0; j < ts.length; j++) s += ts[j].textContent;
+      result.push(s);
+    }
+    return result;
+  }
+
+  function parseDateStyles(xml) {
+    // styleIndex(cellXfs 순서) -> 날짜 형식 여부
+    const isDate = {};
+    if (!xml) return isDate;
+    const doc = parser.parseFromString(xml, "application/xml");
+    const builtinDate = new Set([14,15,16,17,18,19,20,21,22,45,46,47]);
+    const customDate = new Set();
+    const numFmts = doc.getElementsByTagName("numFmt");
+    for (let i = 0; i < numFmts.length; i++) {
+      const id = parseInt(numFmts[i].getAttribute("numFmtId"), 10);
+      const code = (numFmts[i].getAttribute("formatCode") || "").toLowerCase();
+      // 날짜/시간 서식 문자가 있고 통화기호 등이 없으면 날짜로 간주
+      if (/[dy]/.test(code) && /(yy|mm|dd|d|y|hh|ss)/.test(code) && !/[#]/.test(code))
+        customDate.add(id);
+    }
+    const cellXfsEl = doc.getElementsByTagName("cellXfs")[0];
+    if (!cellXfsEl) return isDate;
+    const xfs = cellXfsEl.getElementsByTagName("xf");
+    for (let i = 0; i < xfs.length; i++) {
+      const id = parseInt(xfs[i].getAttribute("numFmtId") || "0", 10);
+      isDate[i] = builtinDate.has(id) || customDate.has(id);
+    }
+    return isDate;
+  }
+
+  function firstSheetPath(files) {
+    // workbook.xml + rels 로 첫 시트의 실제 경로를 찾는다. 실패 시 sheet1.xml.
+    try {
+      const wb = parser.parseFromString(new TextDecoder().decode(files["xl/workbook.xml"]), "application/xml");
+      const sheet = wb.getElementsByTagName("sheet")[0];
+      const rid = sheet.getAttribute("r:id") || sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+      const relsXml = new TextDecoder().decode(files["xl/_rels/workbook.xml.rels"]);
+      const rels = parser.parseFromString(relsXml, "application/xml");
+      const rs = rels.getElementsByTagName("Relationship");
+      for (let i = 0; i < rs.length; i++) {
+        if (rs[i].getAttribute("Id") === rid) {
+          let target = rs[i].getAttribute("Target");
+          if (target.charAt(0) === "/") return target.substring(1);
+          return "xl/" + target.replace(/^\.\//, "");
+        }
+      }
+    } catch (e) { /* 폴백 사용 */ }
+    return "xl/worksheets/sheet1.xml";
+  }
+
+  function read(bytes) {
+    const files = Zip.read(bytes);
+    const dec = new TextDecoder("utf-8");
+    const shared = parseSharedStrings(files["xl/sharedStrings.xml"] ? dec.decode(files["xl/sharedStrings.xml"]) : null);
+    const isDate = parseDateStyles(files["xl/styles.xml"] ? dec.decode(files["xl/styles.xml"]) : null);
+
+    const sheetPath = firstSheetPath(files);
+    if (!files[sheetPath]) throw new Error("xlsx: 시트를 찾을 수 없습니다.");
+    const doc = parser.parseFromString(dec.decode(files[sheetPath]), "application/xml");
+    const rowsEls = doc.getElementsByTagName("row");
+
+    // (rowNum -> {colIdx -> value}) 형태로 수집
+    const cellMap = {};
+    let maxCol = -1, minRow = Infinity, maxRow = -1;
+    for (let r = 0; r < rowsEls.length; r++) {
+      const rowEl = rowsEls[r];
+      const rowNum = parseInt(rowEl.getAttribute("r") || String(r + 1), 10);
+      minRow = Math.min(minRow, rowNum); maxRow = Math.max(maxRow, rowNum);
+      const cs = rowEl.getElementsByTagName("c");
+      const rowObj = cellMap[rowNum] || (cellMap[rowNum] = {});
+      for (let c = 0; c < cs.length; c++) {
+        const cell = cs[c];
+        const ref = cell.getAttribute("r") || "";
+        const letters = ref.replace(/[0-9]/g, "");
+        const colIdx = letters ? colLettersToIndex(letters) : c;
+        maxCol = Math.max(maxCol, colIdx);
+        const t = cell.getAttribute("t");
+        const s = cell.getAttribute("s");
+        let value = null;
+        if (t === "inlineStr") {
+          const ts = cell.getElementsByTagName("t");
+          let str = ""; for (let k = 0; k < ts.length; k++) str += ts[k].textContent;
+          value = str;
+        } else {
+          const vEl = cell.getElementsByTagName("v")[0];
+          const raw = vEl ? vEl.textContent : null;
+          if (raw === null || raw === "") value = null;
+          else if (t === "s") value = shared[parseInt(raw, 10)] ?? "";
+          else if (t === "str") value = raw;
+          else if (t === "b") value = (raw === "1");
+          else if (t === "e") value = raw; // error
+          else {
+            // 숫자. 날짜 서식이면 Date 로 변환.
+            const num = Number(raw);
+            if (s !== null && isDate[parseInt(s, 10)]) value = excelSerialToDate(num);
+            else value = num;
+          }
+        }
+        rowObj[colIdx] = value;
+      }
+    }
+    if (maxRow < 0) return { columns: [], rows: [] };
+
+    // 헤더 = 최소 행. 데이터 = 그 이후.
+    const headerObj = cellMap[minRow] || {};
+    const columns = [];
+    for (let c = 0; c <= maxCol; c++) {
+      const h = headerObj[c];
+      columns.push(Values.isMissing(h) ? ("열" + (c + 1)) : Values.cellText(h));
+    }
+    const rows = [];
+    for (let rn = minRow + 1; rn <= maxRow; rn++) {
+      const obj = cellMap[rn];
+      if (!obj) continue;
+      const row = [];
+      for (let c = 0; c <= maxCol; c++) row.push(c in obj ? obj[c] : null);
+      rows.push(row);
+    }
+    return { columns, rows };
+  }
+  return { read };
+})();
+
+const XlsReader = (function () {
+  // BIFF8(.xls) 최소 리더 — 일반적인 문자열/숫자 셀을 처리하는 best-effort 구현.
+  function rkToNumber(rk) {
+    let f;
+    if (rk & 0x02) { f = rk >> 2; }               // 정수
+    else {
+      const buf = new ArrayBuffer(8); const dv = new DataView(buf);
+      dv.setInt32(0, 0, true); dv.setInt32(4, rk & 0xFFFFFFFC, true);
+      f = dv.getFloat64(0, true);
+    }
+    if (rk & 0x01) f /= 100;
+    return f;
+  }
+  // 연속 청크에 걸친 유니코드 문자열 리더 (SST 용)
+  function makeSSTReader(chunks) {
+    let ci = 0, ci_pos = 0;
+    function u8() { const b = chunks[ci][ci_pos++]; ensure(); return b; }
+    function ensure() { while (ci < chunks.length && ci_pos >= chunks[ci].length) { ci++; ci_pos = 0; } }
+    function u16() { return u8() | (u8() << 8); }
+    function u32() { return (u8() | (u8() << 8) | (u8() << 16) | (u8() << 24)) >>> 0; }
+    function atEnd() { ensure(); return ci >= chunks.length; }
+    function readString() {
+      const cch = u16();
+      let grbit = u8();
+      let high = grbit & 0x01, rich = grbit & 0x08, ext = grbit & 0x04;
+      let cRun = 0, cbExt = 0;
+      if (rich) cRun = u16();
+      if (ext) cbExt = u32();
+      let str = "", read = 0;
+      while (read < cch) {
+        // 청크 경계에서 문자열 데이터가 끊기면 새 grbit 을 읽는다.
+        if (ci_pos >= chunks[ci].length) {
+          ci++; ci_pos = 0;
+          if (ci >= chunks.length) break;
+          grbit = u8(); high = grbit & 0x01;
+        }
+        if (high) { str += String.fromCharCode(u16()); }
+        else { str += String.fromCharCode(u8()); }
+        read++;
+      }
+      for (let i = 0; i < cRun; i++) { u16(); u16(); }       // rich runs 건너뛰기
+      for (let i = 0; i < cbExt; i++) { u8(); }              // ext 데이터 건너뛰기
+      return str;
+    }
+    return { readString, atEnd };
+  }
+
+  function read(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    // 레코드 순회
+    const records = [];
+    while (p + 4 <= bytes.length) {
+      const type = dv.getUint16(p, true);
+      const len = dv.getUint16(p + 2, true);
+      records.push({ type, start: p + 4, len });
+      p += 4 + len;
+      if (type === 0x000A && p >= bytes.length) break; // EOF
+    }
+    // SST 수집 (뒤따르는 CONTINUE 0x003C 포함)
+    let sst = [];
+    for (let i = 0; i < records.length; i++) {
+      if (records[i].type === 0x00FC) {
+        const chunks = [];
+        // SST 본문은 header(8바이트: cstTotal,cstUnique) 이후부터
+        const hdr = records[i].start;
+        const cstUnique = dv.getUint32(hdr + 4, true);
+        chunks.push(bytes.subarray(hdr + 8, hdr + 8 + records[i].len - 8));
+        let j = i + 1;
+        while (j < records.length && records[j].type === 0x003C) {
+          chunks.push(bytes.subarray(records[j].start, records[j].start + records[j].len));
+          j++;
+        }
+        const reader = makeSSTReader(chunks);
+        for (let k = 0; k < cstUnique && !reader.atEnd(); k++) {
+          try { sst.push(reader.readString()); } catch (e) { break; }
+        }
+        break;
+      }
+    }
+    // 셀 수집
+    const cellMap = {}; let maxCol = -1, minRow = Infinity, maxRow = -1;
+    function put(row, col, val) {
+      (cellMap[row] || (cellMap[row] = {}))[col] = val;
+      maxCol = Math.max(maxCol, col); minRow = Math.min(minRow, row); maxRow = Math.max(maxRow, row);
+    }
+    let lastFormulaCell = null;
+    for (const rec of records) {
+      const s = rec.start;
+      switch (rec.type) {
+        case 0x00FD: { // LABELSST
+          const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
+          const isst = dv.getUint32(s + 6, true);
+          put(row, col, sst[isst] ?? ""); break;
+        }
+        case 0x0203: { // NUMBER
+          const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
+          put(row, col, dv.getFloat64(s + 6, true)); break;
+        }
+        case 0x027E: { // RK
+          const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
+          put(row, col, rkToNumber(dv.getUint32(s + 6, true))); break;
+        }
+        case 0x00BD: { // MULRK
+          const row = dv.getUint16(s, true), first = dv.getUint16(s + 2, true);
+          const last = dv.getUint16(s + rec.len - 2, true);
+          let off = s + 4;
+          for (let c = first; c <= last; c++) { const rk = dv.getUint32(off + 2, true); put(row, c, rkToNumber(rk)); off += 6; }
+          break;
+        }
+        case 0x0204: { // LABEL (BIFF8 unicode)
+          const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
+          const cch = dv.getUint16(s + 6, true); const grbit = dv.getUint8(s + 8);
+          let str = "", off = s + 9;
+          for (let k = 0; k < cch; k++) { if (grbit & 1) { str += String.fromCharCode(dv.getUint16(off, true)); off += 2; } else { str += String.fromCharCode(dv.getUint8(off)); off += 1; } }
+          put(row, col, str); break;
+        }
+        case 0x0006: lastFormulaCell = { row: dv.getUint16(s, true), col: dv.getUint16(s + 2, true), num: dv.getFloat64(s + 6, true), isText: dv.getUint8(s + 12) === 0 && dv.getUint16(s + 6, true) === 0 && dv.getUint16(s + 12, true) === 0xFFFF }; // FORMULA
+          // 숫자 결과면 바로 기록 (문자열 결과는 후속 STRING 레코드)
+          if (!(dv.getUint16(s + 12, true) === 0xFFFF)) put(lastFormulaCell.row, lastFormulaCell.col, lastFormulaCell.num);
+          break;
+        case 0x0207: { // STRING (직전 FORMULA 의 문자열 결과)
+          if (lastFormulaCell) {
+            const cch = dv.getUint16(s, true); const grbit = dv.getUint8(s + 2);
+            let str = "", off = s + 3;
+            for (let k = 0; k < cch; k++) { if (grbit & 1) { str += String.fromCharCode(dv.getUint16(off, true)); off += 2; } else { str += String.fromCharCode(dv.getUint8(off)); off += 1; } }
+            put(lastFormulaCell.row, lastFormulaCell.col, str);
+          }
+          break;
+        }
+        default: break;
+      }
+    }
+    if (maxRow < 0) return { columns: [], rows: [] };
+    const headerObj = cellMap[minRow] || {};
+    const columns = [];
+    for (let c = 0; c <= maxCol; c++) columns.push(Values.isMissing(headerObj[c]) ? ("열" + (c + 1)) : Values.cellText(headerObj[c]));
+    const rows = [];
+    for (let rn = minRow + 1; rn <= maxRow; rn++) {
+      const obj = cellMap[rn]; if (!obj) continue;
+      const row = []; for (let c = 0; c <= maxCol; c++) row.push(c in obj ? obj[c] : null);
+      rows.push(row);
+    }
+    return { columns, rows };
+  }
+  return { read };
+})();
+
+const CsvReader = (function () {
+  function decode(buffer) {
+    // 인코딩 자동: utf-8 시도 후 대체문자(U+FFFD) 있으면 euc-kr 재시도
+    let text = new TextDecoder("utf-8").decode(buffer);
+    if (text.indexOf("�") >= 0) {
+      try {
+        const alt = new TextDecoder("euc-kr").decode(buffer);
+        if (alt.indexOf("�") < 0) text = alt;
+      } catch (e) { /* euc-kr 미지원 시 utf-8 유지 */ }
+    }
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM 제거
+    return text;
+  }
+  function parse(text) {
+    const rows = []; let row = [], field = "", inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+        else field += ch;
+      } else {
+        if (ch === '"') inQuotes = true;
+        else if (ch === ",") { row.push(field); field = ""; }
+        else if (ch === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+        else if (ch === "\r") { /* skip */ }
+        else field += ch;
+      }
+    }
+    if (field !== "" || row.length) { row.push(field); rows.push(row); }
+    return rows;
+  }
+  function read(buffer) {
+    const raw = parse(decode(buffer)).filter(r => !(r.length === 1 && r[0] === ""));
+    if (!raw.length) return { columns: [], rows: [] };
+    const columns = raw[0].map((c, i) => (c && c.trim() !== "") ? c : ("열" + (i + 1)));
+    const rows = raw.slice(1);
+    // 각 행 길이를 헤더에 맞춤
+    rows.forEach(r => { while (r.length < columns.length) r.push(""); });
+    return { columns, rows };
+  }
+  return { read, parse, decode };
+})();
+
+/** 확장자에 따라 적절한 리더로 파일을 읽어 Table 을 반환한다. */
+async function readFile(file) {
+  const name = file.name.toLowerCase();
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let raw;
+  if (name.endsWith(".csv")) raw = CsvReader.read(buf);
+  else if (name.endsWith(".xlsx")) raw = XlsxReader.read(buf);
+  else if (name.endsWith(".xls")) raw = XlsReader.read(buf);
+  else throw new Error("지원하지 않는 파일 형식입니다.");
+  if (!raw.columns.length) throw new Error("데이터를 읽지 못했습니다(빈 파일 또는 형식 오류).");
+  return raw; // {columns, rows}
+}
+
+/* =====================================================================
+ * 4. 컬럼 타입 자동 분석
+ * ===================================================================== */
+const ColumnAnalyzer = (function () {
+  const RATIO = 0.8;
+  function detectType(values) {
+    const nonMissing = values.filter(v => !Values.isMissing(v));
+    if (!nonMissing.length) return "String";
+    let num = 0, date = 0;
+    for (const v of nonMissing) {
+      if (typeof v === "number") num++;
+      else if (v instanceof Date) date++;
+      else if (Values.toNumber(v) !== null) num++;
+      else if (Values.toDate(v) !== null) date++;
+    }
+    const total = nonMissing.length;
+    if (num / total >= RATIO) return "Number";
+    if (date / total >= RATIO) return "Date";
+    return "String";
+  }
+  function analyze(table) {
+    return table.columns.map((name, idx) => ({
+      name, type: detectType(table.rows.map(r => r[idx]))
+    }));
+  }
+  function numericColumns(infos) { return infos.filter(i => i.type === "Number").map(i => i.name); }
+  function buildNumericConfigs(table, infos) {
+    const configs = [];
+    for (const info of infos) {
+      if (info.type !== "Number") continue;
+      const idx = table.columns.indexOf(info.name);
+      const nums = table.rows.map(r => Values.toNumber(r[idx])).filter(n => n !== null);
+      const min = nums.length ? Math.min(...nums) : 0;
+      const max = nums.length ? Math.max(...nums) : 0;
+      configs.push({ name: info.name, actualMin: min, actualMax: max, allowMin: min, allowMax: max, use: true });
+    }
+    return configs;
+  }
+  return { analyze, numericColumns, buildNumericConfigs };
+})();
+
+/* =====================================================================
+ * 5. 이상치 탐지 알고리즘 (공통 인터페이스: detect(ctx) -> [{row, reason}])
+ *    ctx = { table, numericColumns, numericFrame(col->number[]|null), config }
+ * ===================================================================== */
+const Detectors = (function () {
+  const F = Values.fmtNum;
+
+  // ① 결측치
+  function missing(ctx) {
+    const out = [];
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      const cols = [];
+      ctx.table.columns.forEach((c, i) => { if (Values.isMissing(ctx.table.rows[r][i])) cols.push(c); });
+      if (cols.length) out.push({ row: r, reason: "결측치 [" + cols.join(", ") + "]" });
+    }
+    return out;
+  }
+
+  // ② 중복 데이터 (모든 컬럼 값이 동일한 행)
+  function duplicate(ctx) {
+    const seen = new Map(); const groups = new Map();
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      const key = ctx.table.rows[r].map(Values.cellText).join("");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    }
+    const out = [];
+    for (const rowsIdx of groups.values())
+      if (rowsIdx.length > 1) rowsIdx.forEach(r => out.push({ row: r, reason: "중복 데이터" }));
+    return out;
+  }
+
+  // ③ 범위 검사
+  function range(ctx) {
+    const out = [];
+    for (const cfg of ctx.config.numericConfigs) {
+      if (!cfg.use) continue;
+      const col = ctx.numericFrame[cfg.name]; if (!col) continue;
+      for (let r = 0; r < col.length; r++) {
+        const v = col[r]; if (v === null) continue;
+        if (v < cfg.allowMin || v > cfg.allowMax)
+          out.push({ row: r, reason: "범위 초과 [" + cfg.name + "] (허용:" + F(cfg.allowMin) + "~" + F(cfg.allowMax) + ", 실제:" + F(v) + ")" });
+      }
+    }
+    return out;
+  }
+
+  // ④ 증감률 검사 (이전 행 대비)
+  function changeRate(ctx) {
+    const out = []; const th = ctx.config.changeRateThreshold;
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name]; let prev = null;
+      for (let r = 0; r < col.length; r++) {
+        const cur = col[r];
+        if (cur === null) { prev = null; continue; }
+        if (prev !== null && prev !== 0) {
+          const ch = (cur - prev) / Math.abs(prev) * 100;
+          if (Math.abs(ch) > th) out.push({ row: r, reason: "증감률 이상 [" + name + "] (" + (ch >= 0 ? "+" : "-") + F(Math.abs(ch)) + "%)" });
+        }
+        prev = cur;
+      }
+    }
+    return out;
+  }
+
+  // ⑤ IQR
+  function iqr(ctx) {
+    const out = [];
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name];
+      const vals = col.filter(v => v !== null).sort((a, b) => a - b);
+      if (vals.length < 4) continue;
+      const q = (p) => { const pos = (vals.length - 1) * p; const lo = Math.floor(pos), hi = Math.ceil(pos); return vals[lo] + (vals[hi] - vals[lo]) * (pos - lo); };
+      const q1 = q(0.25), q3 = q(0.75), iqrv = q3 - q1;
+      if (iqrv === 0) continue;
+      const lower = q1 - 1.5 * iqrv, upper = q3 + 1.5 * iqrv;
+      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; if (v < lower || v > upper) out.push({ row: r, reason: "IQR 이상 [" + name + "]" }); }
+    }
+    return out;
+  }
+
+  // ⑥ Z-Score
+  function zscore(ctx) {
+    const out = []; const th = ctx.config.zscoreThreshold;
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name];
+      const vals = col.filter(v => v !== null);
+      if (vals.length < 2) continue;
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length);
+      if (std === 0) continue;
+      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; const z = (v - mean) / std; if (Math.abs(z) > th) out.push({ row: r, reason: "Z-Score 이상 [" + name + "] (Z=" + F(Math.round(Math.abs(z) * 100) / 100) + ")" }); }
+    }
+    return out;
+  }
+
+  // --- 머신러닝 공통: 특징 행렬(표준화 옵션) ---
+  function featureMatrix(ctx, standardize) {
+    const cols = ctx.numericColumns;
+    if (!cols.length) return { X: [], pos: [] };
+    const X = [], pos = [];
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      const row = []; let ok = true;
+      for (const c of cols) { const v = ctx.numericFrame[c][r]; if (v === null) { ok = false; break; } row.push(v); }
+      if (ok) { X.push(row); pos.push(r); }
+    }
+    if (standardize && X.length) {
+      for (let j = 0; j < cols.length; j++) {
+        let m = 0; for (const row of X) m += row[j]; m /= X.length;
+        let s = 0; for (const row of X) s += (row[j] - m) * (row[j] - m); s = Math.sqrt(s / X.length) || 1;
+        for (const row of X) row[j] = (row[j] - m) / s;
+      }
+    }
+    return { X, pos };
+  }
+  function dist(a, b) { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
+
+  // 재현성 있는 난수 (mulberry32)
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // ⑦ Isolation Forest
+  function isolationForest(ctx) {
+    const { X, pos } = featureMatrix(ctx, false);
+    const n = X.length, dim = X.length ? X[0].length : 0;
+    if (n < 2 || dim === 0) return [];
+    const rand = rng(42);
+    const nTrees = 100, psi = Math.min(256, n);
+    const heightLimit = Math.ceil(Math.log2(psi));
+    const c = (m) => m > 2 ? 2 * (Math.log(m - 1) + 0.5772156649) - 2 * (m - 1) / m : (m === 2 ? 1 : 0);
+
+    function buildTree(idxs, depth) {
+      if (depth >= heightLimit || idxs.length <= 1) return { size: idxs.length, ext: true };
+      const q = Math.floor(rand() * dim);
+      let mn = Infinity, mx = -Infinity;
+      for (const i of idxs) { const v = X[i][q]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      if (mn === mx) return { size: idxs.length, ext: true };
+      const p = mn + rand() * (mx - mn);
+      const left = [], right = [];
+      for (const i of idxs) (X[i][q] < p ? left : right).push(i);
+      return { ext: false, q, p, left: buildTree(left, depth + 1), right: buildTree(right, depth + 1) };
+    }
+    function pathLen(x, node, depth) {
+      if (node.ext) return depth + c(node.size);
+      return x[node.q] < node.p ? pathLen(x, node.left, depth + 1) : pathLen(x, node.right, depth + 1);
+    }
+    const trees = [];
+    for (let t = 0; t < nTrees; t++) {
+      const sample = [];
+      for (let k = 0; k < psi; k++) sample.push(Math.floor(rand() * n));
+      trees.push(buildTree(sample, 0));
+    }
+    const cPsi = c(psi) || 1;
+    const scores = X.map(x => { let sum = 0; for (const tr of trees) sum += pathLen(x, tr, 0); return Math.pow(2, -(sum / nTrees) / cPsi); });
+    const k = Math.max(1, Math.round(ctx.config.isoContamination * n));
+    const threshold = scores.slice().sort((a, b) => b - a)[Math.min(k, n) - 1];
+    const out = [];
+    for (let i = 0; i < n; i++) if (scores[i] >= threshold) out.push({ row: pos[i], reason: "Isolation Forest 이상" });
+    return out;
+  }
+
+  // ⑧ LOF
+  function lof(ctx) {
+    const { X, pos } = featureMatrix(ctx, true);
+    const n = X.length; if (n < 2) return [];
+    const k = Math.min(ctx.config.lofNeighbors, n - 1); if (k < 1) return [];
+    const D = []; for (let i = 0; i < n; i++) D.push(new Float64Array(n));
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const d = dist(X[i], X[j]); D[i][j] = d; D[j][i] = d; }
+    const neigh = [], kdist = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const order = []; for (let j = 0; j < n; j++) if (j !== i) order.push(j);
+      order.sort((a, b) => D[i][a] - D[i][b]);
+      const kn = order.slice(0, k); neigh.push(kn); kdist[i] = D[i][kn[kn.length - 1]];
+    }
+    const lrd = new Float64Array(n);
+    for (let i = 0; i < n; i++) { let sum = 0; for (const o of neigh[i]) sum += Math.max(kdist[o], D[i][o]); lrd[i] = sum === 0 ? Infinity : neigh[i].length / sum; }
+    const out = [];
+    for (let i = 0; i < n; i++) { let sum = 0; for (const o of neigh[i]) sum += lrd[o]; const lofv = (lrd[i] === Infinity) ? 1 : (sum / neigh[i].length) / lrd[i]; if (lofv > 1.5) out.push({ row: pos[i], reason: "LOF 이상" }); }
+    return out;
+  }
+
+  // ⑨ DBSCAN
+  function dbscan(ctx) {
+    const { X, pos } = featureMatrix(ctx, true);
+    const n = X.length; if (n < 1) return [];
+    const eps = ctx.config.dbscanEps, minPts = ctx.config.dbscanMinSamples;
+    const neighbors = (i) => { const res = []; for (let j = 0; j < n; j++) if (dist(X[i], X[j]) <= eps) res.push(j); return res; };
+    const labels = new Int32Array(n).fill(-2); // -2 미방문, -1 노이즈, >=0 군집
+    let cid = 0;
+    for (let i = 0; i < n; i++) {
+      if (labels[i] !== -2) continue;
+      const nb = neighbors(i);
+      if (nb.length < minPts) { labels[i] = -1; continue; }
+      labels[i] = cid;
+      const queue = nb.slice();
+      for (let qi = 0; qi < queue.length; qi++) {
+        const j = queue[qi];
+        if (labels[j] === -1) labels[j] = cid;
+        if (labels[j] !== -2) continue;
+        labels[j] = cid;
+        const nb2 = neighbors(j);
+        if (nb2.length >= minPts) for (const x of nb2) queue.push(x);
+      }
+      cid++;
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) if (labels[i] === -1) out.push({ row: pos[i], reason: "DBSCAN 이상" });
+    return out;
+  }
+
+  // 활성화된 detector 목록 (순서 = 사유 나열 순서)
+  function active(config) {
+    const reg = [
+      [config.missing, "결측치", missing], [config.duplicate, "중복 데이터", duplicate],
+      [config.range, "범위 초과", range], [config.change, "증감률 이상", changeRate],
+      [config.iqr, "IQR", iqr], [config.zscore, "Z-Score", zscore],
+      [config.iforest, "Isolation Forest", isolationForest],
+      [config.lof, "LOF", lof], [config.dbscan, "DBSCAN", dbscan],
+    ];
+    return reg.filter(x => x[0]).map(x => ({ name: x[1], fn: x[2] }));
+  }
+  return { active };
+})();
+
+/* =====================================================================
+ * 6. 분석 오케스트레이션 (진행률 콜백 + UI 양보를 위한 비동기)
+ * ===================================================================== */
+async function runAnalysis(table, config, onProgress) {
+  const sleep = () => new Promise(r => setTimeout(r, 0));
+  onProgress(2, "컬럼 타입 분석 중...");
+  const infos = ColumnAnalyzer.analyze(table);
+  const numericColumns = ColumnAnalyzer.numericColumns(infos);
+  const numericFrame = {};
+  for (const name of numericColumns) {
+    const idx = table.columns.indexOf(name);
+    numericFrame[name] = table.rows.map(r => Values.toNumber(r[idx]));
+  }
+  const ctx = { table, numericColumns, numericFrame, config };
+
+  const detectors = Detectors.active(config);
+  const reasonsByRow = new Map();
+  for (let i = 0; i < detectors.length; i++) {
+    onProgress(Math.round((i / detectors.length) * 90) + 5, detectors[i].name + " 분석 중...");
+    await sleep();
+    try {
+      const findings = detectors[i].fn(ctx);
+      for (const f of findings) {
+        if (!reasonsByRow.has(f.row)) reasonsByRow.set(f.row, []);
+        reasonsByRow.get(f.row).push(f.reason);
+      }
+    } catch (e) { console.warn(detectors[i].name + " 실패:", e); }
+  }
+  onProgress(96, "결과 집계 중...");
+  await sleep();
+  const flags = [], reasons = [];
+  for (let r = 0; r < table.rows.length; r++) {
+    const rr = reasonsByRow.get(r);
+    if (rr) { flags.push("이상"); reasons.push(rr.join(", ")); }
+    else { flags.push(""); reasons.push(""); }
+  }
+  onProgress(100, "분석 완료");
+  return { table, infos, flags, reasons, anomalyCount: flags.filter(f => f).length };
+}
+
+/* =====================================================================
+ * 7. 결과 Excel 작성기 (Result / Anomaly 2시트, 이상 행 노란색)
+ * ===================================================================== */
+const XlsxWriter = (function () {
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function colLetter(idx) { let s = ""; idx++; while (idx > 0) { const m = (idx - 1) % 26; s = String.fromCharCode(65 + m) + s; idx = Math.floor((idx - 1) / 26); } return s; }
+
+  function cellXml(ref, value, styled) {
+    const sAttr = styled ? ' s="1"' : "";
+    if (Values.isMissing(value)) return '<c r="' + ref + '"' + sAttr + '/>';
+    if (typeof value === "number" && isFinite(value))
+      return '<c r="' + ref + '"' + sAttr + '><v>' + value + '</v></c>';
+    const text = Values.cellText(value);
+    return '<c r="' + ref + '" t="inlineStr"' + sAttr + '><is><t xml:space="preserve">' + esc(text) + '</t></is></c>';
+  }
+
+  function sheetXml(columns, rows, flags) {
+    // flags: 각 데이터 행의 이상 여부(true면 노란색). 헤더는 스타일 없음.
+    let x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    // 헤더
+    x += '<row r="1">';
+    columns.forEach((c, i) => x += cellXml(colLetter(i) + "1", c, false));
+    x += '</row>';
+    // 데이터
+    for (let r = 0; r < rows.length; r++) {
+      const styled = flags[r] === true;
+      x += '<row r="' + (r + 2) + '">';
+      for (let c = 0; c < columns.length; c++) x += cellXml(colLetter(c) + (r + 2), rows[r][c], styled);
+      x += '</row>';
+    }
+    x += '</sheetData></worksheet>';
+    return x;
+  }
+
+  function build(result, flagColName, reasonColName) {
+    const enc = new TextEncoder();
+    const cols = result.table.columns.concat([flagColName, reasonColName]);
+    // Result 시트 데이터
+    const resultRows = result.table.rows.map((r, i) => r.concat([result.flags[i], result.reasons[i]]));
+    const resultFlags = result.flags.map(f => f === "이상");
+    // Anomaly 시트 데이터
+    const anomRows = [], anomFlags = [];
+    for (let i = 0; i < resultRows.length; i++) if (result.flags[i] === "이상") { anomRows.push(resultRows[i]); anomFlags.push(true); }
+
+    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+      '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+      '<Default Extension="xml" ContentType="application/xml"/>' +
+      '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+      '</Types>';
+    const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+      '</Relationships>';
+    const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      '<sheets><sheet name="Result" sheetId="1" r:id="rId1"/><sheet name="Anomaly" sheetId="2" r:id="rId2"/></sheets></workbook>';
+    const wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
+      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+      '</Relationships>';
+    const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
+      '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      '<borders count="1"><border/></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/></cellXfs>' +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+
+    const entries = [
+      { name: "[Content_Types].xml", data: enc.encode(contentTypes) },
+      { name: "_rels/.rels", data: enc.encode(rels) },
+      { name: "xl/workbook.xml", data: enc.encode(workbook) },
+      { name: "xl/_rels/workbook.xml.rels", data: enc.encode(wbRels) },
+      { name: "xl/styles.xml", data: enc.encode(styles) },
+      { name: "xl/worksheets/sheet1.xml", data: enc.encode(sheetXml(cols, resultRows, resultFlags)) },
+      { name: "xl/worksheets/sheet2.xml", data: enc.encode(sheetXml(cols, anomRows, anomFlags)) },
+    ];
+    return Zip.write(entries);
+  }
+  return { build };
+})();
+
+/* =====================================================================
+ * 8. UI 연동
+ * ===================================================================== */
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const FLAG_COL = "이상치 여부", REASON_COL = "이상치 사유";
+  let table = null, numericConfigs = [], lastResult = null;
+
+  function setStatus(msg) { $("status").textContent = msg; }
+  function setProgress(pct) { $("progressBar").style.width = pct + "%"; }
+
+  // 파일 선택
+  $("btnPick").addEventListener("click", () => $("fileInput").click());
+  $("fileInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    $("fileName").textContent = file.name; $("fileName").classList.remove("filecue");
+    setStatus("파일 읽는 중..."); setProgress(0);
+    try {
+      const raw = await readFile(file);
+      table = new TableWrapper(raw.columns, raw.rows);
+      const infos = ColumnAnalyzer.analyze(table);
+      numericConfigs = ColumnAnalyzer.buildNumericConfigs(table, infos);
+      renderNumericTable();
+      const typeSummary = infos.map(i => i.name + "(" + i.type + ")").join(", ");
+      $("fileInfo").textContent = "행 " + table.rows.length + " × 열 " + table.columns.length +
+        " · 숫자 컬럼 " + numericConfigs.length + "개 · 타입: " + typeSummary;
+      $("outName").value = file.name.replace(/\.[^.]+$/, "") + "_result.xlsx";
+      setStatus("파일 로드 완료. [분석 시작] 을 누르세요.");
+      $("resultPanel").classList.add("hidden");
+    } catch (err) {
+      console.error(err);
+      alert("파일 읽기 실패: " + err.message);
+      setStatus("파일 읽기 실패");
+    }
+  });
+
+  // 간단한 Table 래퍼 (columns/rows 보관)
+  function TableWrapper(columns, rows) { this.columns = columns; this.rows = rows; }
+
+  function renderNumericTable() {
+    const tb = $("numTableBody"); tb.innerHTML = "";
+    if (!numericConfigs.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">숫자 컬럼이 없습니다.</td></tr>'; return; }
+    numericConfigs.forEach((cfg, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + cfg.name + "</td>" +
+        "<td>" + Values.fmtNum(cfg.actualMin) + "</td>" +
+        "<td>" + Values.fmtNum(cfg.actualMax) + "</td>" +
+        '<td><input type="number" step="any" value="' + cfg.allowMin + '" data-i="' + i + '" data-k="allowMin"></td>' +
+        '<td><input type="number" step="any" value="' + cfg.allowMax + '" data-i="' + i + '" data-k="allowMax"></td>' +
+        '<td style="text-align:center"><input type="checkbox" ' + (cfg.use ? "checked" : "") + ' data-i="' + i + '" data-k="use"></td>';
+      tb.appendChild(tr);
+    });
+    tb.querySelectorAll("input").forEach(inp => inp.addEventListener("change", (e) => {
+      const i = +e.target.dataset.i, k = e.target.dataset.k;
+      if (k === "use") numericConfigs[i].use = e.target.checked;
+      else { const v = parseFloat(e.target.value); if (!isNaN(v)) numericConfigs[i][k] = v; }
+    }));
+  }
+
+  function collectConfig() {
+    return {
+      missing: $("opt_missing").checked, duplicate: $("opt_duplicate").checked,
+      range: $("opt_range").checked, change: $("opt_change").checked,
+      iqr: $("opt_iqr").checked, zscore: $("opt_zscore").checked,
+      iforest: $("opt_iforest").checked, lof: $("opt_lof").checked, dbscan: $("opt_dbscan").checked,
+      changeRateThreshold: parseFloat($("p_change").value) || 100,
+      zscoreThreshold: parseFloat($("p_zscore").value) || 3,
+      isoContamination: parseFloat($("p_contam").value) || 0.05,
+      lofNeighbors: parseInt($("p_neighbors").value, 10) || 20,
+      dbscanEps: parseFloat($("p_eps").value) || 0.5,
+      dbscanMinSamples: parseInt($("p_minsamples").value, 10) || 5,
+      numericConfigs: numericConfigs,
+    };
+  }
+
+  // 분석 시작
+  $("btnRun").addEventListener("click", async () => {
+    if (!table) { alert("먼저 파일을 선택하세요."); return; }
+    $("btnRun").disabled = true; setProgress(0);
+    try {
+      const config = collectConfig();
+      lastResult = await runAnalysis(table, config, (pct, msg) => { setProgress(pct); setStatus(msg); });
+      renderResult(lastResult);
+      $("resultPanel").classList.remove("hidden");
+    } catch (err) {
+      console.error(err); alert("분석 실패: " + err.message); setStatus("분석 실패");
+    } finally { $("btnRun").disabled = false; }
+  });
+
+  function renderResult(result) {
+    const total = result.table.rows.length, anom = result.anomalyCount;
+    $("summary").innerHTML =
+      '<div class="stat"><b>' + total + '</b>전체 행</div>' +
+      '<div class="stat"><b style="color:#b23c17">' + anom + '</b>이상 행</div>' +
+      '<div class="stat"><b style="color:#2e7d32">' + (total - anom) + '</b>정상 행</div>';
+    renderPreview(result);
+  }
+
+  function renderPreview(result) {
+    const onlyAnom = $("onlyAnomaly").checked;
+    const cols = result.table.columns.concat([FLAG_COL, REASON_COL]);
+    const thead = $("resultTable").querySelector("thead");
+    const tbody = $("resultTable").querySelector("tbody");
+    thead.innerHTML = "<tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr>";
+    let html = "", shown = 0; const LIMIT = 300;
+    for (let r = 0; r < result.table.rows.length; r++) {
+      const isAnom = result.flags[r] === "이상";
+      if (onlyAnom && !isAnom) continue;
+      if (shown >= LIMIT) break;
+      shown++;
+      const cells = result.table.rows[r].map(v => "<td>" + escapeHtml(Values.cellText(v)) + "</td>").join("");
+      html += "<tr class='" + (isAnom ? "anomaly" : "") + "'>" + cells +
+        "<td>" + result.flags[r] + "</td><td>" + escapeHtml(result.reasons[r]) + "</td></tr>";
+    }
+    tbody.innerHTML = html || '<tr><td colspan="' + cols.length + '" class="muted">표시할 행이 없습니다.</td></tr>';
+    const totalShown = onlyAnom ? result.anomalyCount : result.table.rows.length;
+    $("previewNote").textContent = "미리보기: " + shown + " / " + totalShown + " 행 표시" +
+      (totalShown > LIMIT ? " (다운로드 파일에는 전체가 포함됩니다)" : "");
+  }
+  $("onlyAnomaly").addEventListener("change", () => { if (lastResult) renderPreview(lastResult); });
+
+  function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  // 결과 다운로드
+  $("btnDownload").addEventListener("click", () => {
+    if (!lastResult) return;
+    const bytes = XlsxWriter.build(lastResult, FLAG_COL, REASON_COL);
+    let name = $("outName").value.trim() || "anomaly_result.xlsx";
+    if (!/\.xlsx$/i.test(name)) name += ".xlsx";
+    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  // 테스트 편의를 위해 일부 내부 기능을 전역에 노출
+  window.__anomaly = { readFile, runAnalysis, XlsxWriter, ColumnAnalyzer, Zip, Values, TableWrapper };
+})();
+
+/* =====================================================================
+ * 9. Info(ⓘ) 아이콘 + 툴팁 — 옵션/파라미터 설명
+ *
+ *  - 설명 문구는 아래 TOOLTIP_INFO 설정 객체에서만 관리한다(하드코딩 X).
+ *  - key 는 해당 입력 요소의 id 와 동일하게 맞춘다(자동 매핑).
+ *  - 새 옵션 추가 시: 화면에 입력 요소를 추가하고, 그 id 를 key 로 하는
+ *    설명 항목만 이 객체에 추가하면 툴팁이 자동으로 동작한다.
+ *    (예시로 PCA / KMeans 항목도 미리 정의해 두었다 — UI 추가 시 즉시 동작)
+ *  - InfoTooltip 은 특정 화면에 종속되지 않는 공통 컴포넌트로,
+ *    다른 화면에서도 InfoTooltip.createIcon(key) 로 재사용할 수 있다.
+ * ===================================================================== */
+const TOOLTIP_INFO = {
+  /* --- ② 분석 옵션(체크박스) --- */
+  opt_missing: {
+    title: "결측치 탐지",
+    meaning: "값이 비어 있는 셀(NULL, 빈칸, 공백)을 찾아냅니다.",
+    when: "데이터 입력 누락이나 수집 오류를 점검할 때 사용합니다.",
+    beginner: "특별한 이유가 없으면 항상 켜두는 것을 권장합니다.",
+    caution: "결측이 많은 컬럼은 통계·머신러닝 분석의 정확도를 떨어뜨릴 수 있습니다.",
+  },
+  opt_duplicate: {
+    title: "중복 데이터 탐지",
+    meaning: "모든 컬럼 값이 완전히 똑같은 행을 중복으로 찾아냅니다.",
+    when: "같은 데이터가 두 번 이상 입력되었는지 확인할 때 사용합니다.",
+    beginner: "기본으로 켜두면 안전합니다.",
+    caution: "일부 컬럼만 같은 경우는 중복으로 보지 않습니다(전체 값 일치 기준).",
+  },
+  opt_range: {
+    title: "범위 검사",
+    meaning: "숫자 값이 사용자가 정한 허용 최소~최대 범위를 벗어나는지 검사합니다.",
+    when: "'수행률은 0~100%'처럼 값의 상식적 한계가 분명할 때 사용합니다.",
+    effect: "허용 범위를 좁히면 더 엄격하게, 넓히면 느슨하게 판정합니다.",
+    beginner: "아래 '숫자 컬럼 설정'에서 컬럼별 허용값을 지정하세요.",
+    caution: "'사용'을 체크한 컬럼만 검사합니다.",
+  },
+  opt_change: {
+    title: "증감률 검사",
+    meaning: "바로 앞 행 대비 값이 몇 % 변했는지 계산해 급격한 변화를 찾습니다.",
+    when: "시간순으로 정렬된 데이터에서 갑작스러운 변화를 볼 때 유용합니다.",
+    caution: "행 순서가 시간 순이 아니면 의미가 약해집니다. 임계치(%)로 민감도를 조절하세요.",
+  },
+  opt_iqr: {
+    title: "IQR (사분위 범위)",
+    meaning: "사분위수(Q1~Q3) 기반으로 정상 범위를 정하고 그 밖의 값을 이상치로 봅니다.",
+    when: "데이터 분포를 몰라도 무난하게 쓸 수 있는 통계 기법입니다.",
+    recommend: "판정 배수(k)는 일반적으로 1.5를 사용합니다(본 프로그램은 1.5 고정).",
+    effect: "배수가 크면(예: 3.0) 아주 극단적인 값만 탐지합니다.",
+    caution: "데이터가 4건 미만이거나 값이 거의 일정하면 자동으로 건너뜁니다.",
+  },
+  opt_zscore: {
+    title: "Z-Score",
+    meaning: "값이 평균에서 몇 표준편차 떨어졌는지로 이상치를 판정합니다.",
+    when: "데이터가 대체로 정규분포(종 모양)에 가까울 때 효과적입니다.",
+    recommend: "임계치 3.0을 가장 많이 씁니다(아래 파라미터에서 조절).",
+    caution: "분포가 심하게 치우쳐 있으면 IQR 등 다른 기법이 더 적합합니다.",
+  },
+  opt_iforest: {
+    title: "Isolation Forest",
+    meaning: "무작위 분할 트리로 '쉽게 고립되는' 값을 이상치로 찾는 머신러닝 기법입니다.",
+    when: "여러 숫자 컬럼을 함께 고려해 복합적인 이상치를 찾을 때 사용합니다.",
+    recommend: "이상치 비율(contamination)로 민감도를 정합니다(아래 파라미터).",
+    caution: "결측이 있는 행은 계산에서 제외합니다.",
+  },
+  opt_lof: {
+    title: "Local Outlier Factor (LOF)",
+    meaning: "주변 이웃보다 상대적으로 밀도가 낮은(외따로 떨어진) 점을 이상치로 봅니다.",
+    when: "지역적으로 튀는 값(부분 집단 내 이상)을 찾을 때 강점이 있습니다.",
+    recommend: "이웃 수(n_neighbors)로 민감도를 조절합니다(아래 파라미터).",
+    caution: "값의 크기 차이를 없애기 위해 내부적으로 표준화 후 계산합니다.",
+  },
+  opt_dbscan: {
+    title: "DBSCAN",
+    meaning: "가까운 점끼리 군집을 만들고, 어느 군집에도 속하지 못한 점(노이즈)을 이상치로 봅니다.",
+    when: "밀집된 정상 데이터 사이에서 드문드문 떨어진 값을 찾을 때 사용합니다.",
+    recommend: "eps(이웃 거리)와 min_samples(최소 군집 크기)로 동작을 조절합니다.",
+    caution: "eps 설정에 민감합니다. 표준화된 데이터 기준으로 값을 정하세요.",
+  },
+
+  /* --- 알고리즘 파라미터(수치 입력) --- */
+  p_change: {
+    title: "증감률 임계치 (%)",
+    meaning: "앞 행 대비 변화율이 이 값(%)을 넘으면 이상으로 판정합니다.",
+    recommend: "보통 100%를 많이 사용합니다.",
+    range: "데이터 특성에 따라 50~200% 범위에서 조절합니다.",
+    effect: "낮추면 작은 변화도 이상으로 잡고, 높이면 큰 급변만 잡습니다.",
+    beginner: "잘 모르면 100으로 시작하세요.",
+  },
+  p_zscore: {
+    title: "Z-Score 임계치",
+    meaning: "평균으로부터 몇 표준편차 이상 떨어지면 이상치로 볼지 결정합니다.",
+    recommend: "일반적으로 3.0을 가장 많이 사용합니다.",
+    range: "2.5~3.5 범위를 권장합니다.",
+    effect: "값을 낮추면 이상치를 더 많이 탐지하고, 높이면 극단적인 값만 탐지합니다.",
+    beginner: "3.0을 추천합니다.",
+  },
+  p_contam: {
+    title: "Isolation Forest contamination",
+    meaning: "전체 데이터 중 이상치가 차지할 것으로 보는 비율입니다.",
+    recommend: "보통 0.01~0.1(1~10%)을 사용합니다.",
+    range: "0.001 ~ 0.5.",
+    effect: "크게 하면 더 많은 행을, 작게 하면 소수만 이상으로 판정합니다.",
+    beginner: "사전 정보가 없으면 0.05를 권장합니다.",
+    caution: "실제 이상치 비율과 크게 다르면 오탐/미탐이 늘 수 있습니다.",
+  },
+  p_neighbors: {
+    title: "LOF n_neighbors",
+    meaning: "각 점의 밀도를 계산할 때 참고하는 주변 이웃 개수입니다.",
+    recommend: "일반적으로 20을 권장합니다.",
+    range: "데이터가 적으면 10~20, 많으면 20~50 정도.",
+    effect: "너무 작으면 노이즈에 민감하고, 너무 크면 지역적 이상치를 놓칠 수 있습니다.",
+    caution: "전체 데이터 수보다 작아야 합니다(자동으로 상한 조정).",
+  },
+  p_eps: {
+    title: "DBSCAN eps",
+    meaning: "두 점을 '이웃'으로 인정하는 최대 거리입니다.",
+    when: "데이터를 표준화(정규화)한 기준으로 설정하는 것을 권장합니다.",
+    recommend: "표준화된 데이터에서는 0.3~1.0 부근을 흔히 사용합니다(기본 0.5).",
+    effect: "크게 하면 넓게 묶여 이상치가 줄고, 작게 하면 더 많은 점이 노이즈가 됩니다.",
+    caution: "데이터 스케일에 매우 민감합니다.",
+  },
+  p_minsamples: {
+    title: "DBSCAN min_samples",
+    meaning: "하나의 군집을 이루기 위한 최소 점(샘플) 개수입니다.",
+    recommend: "일반적으로 5를 사용합니다.",
+    range: "보통 3~10.",
+    effect: "크게 하면 군집 기준이 엄격해져 노이즈(이상치)가 늘어납니다.",
+    beginner: "5로 시작하세요.",
+  },
+
+  /* --- 향후 확장 예시(현재 UI 미노출, 입력 요소 추가 시 자동 동작) --- */
+  p_pca_components: {
+    title: "PCA Components",
+    meaning: "차원 축소 시 유지할 주성분(축)의 개수입니다.",
+    recommend: "설명분산비가 90~95% 이상이 되도록 선택하는 것을 권장합니다.",
+  },
+  p_kmeans_k: {
+    title: "KMeans Cluster 수 (k)",
+    meaning: "생성할 군집(그룹)의 개수입니다.",
+    recommend: "Elbow Method 또는 Silhouette Score를 참고하여 결정합니다.",
+  },
+};
+
+const InfoTooltip = (function () {
+  // 표시 순서와 라벨 정의(설정 객체에 존재하는 필드만 렌더링)
+  const FIELDS = [
+    ["meaning", "의미"], ["when", "사용 시점"], ["effect", "값의 영향"],
+    ["recommend", "권장값"], ["range", "권장 범위"], ["beginner", "초보자 추천"],
+    ["caution", "주의사항"],
+  ];
+  let tip = null, mode = null, anchor = null, timer = null;
+
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+  function ensure() {
+    if (tip) return tip;
+    tip = document.createElement("div");
+    tip.className = "info-tooltip"; tip.id = "info-tooltip"; tip.setAttribute("role", "tooltip");
+    // 툴팁 위로 마우스가 올라오면 유지, 벗어나면 닫기(hover 모드)
+    tip.addEventListener("mouseenter", () => clearTimeout(timer));
+    tip.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
+    document.body.appendChild(tip);
+    return tip;
+  }
+  function buildHtml(key) {
+    const info = TOOLTIP_INFO[key]; if (!info) return "";
+    let h = '<div class="it-title">' + esc(info.title) + "</div>";
+    for (const [f, label] of FIELDS)
+      if (info[f]) h += '<div class="it-row"><span class="it-label">' + label +
+        '</span><span class="it-text">' + esc(info[f]) + "</span></div>";
+    return h;
+  }
+  // 화면 밖으로 벗어나지 않도록 자동 위치 조정(아래 우선, 공간 없으면 위로 뒤집기)
+  function place(a) {
+    const t = ensure(), r = a.getBoundingClientRect(), m = 8;
+    const tw = t.offsetWidth, th = t.offsetHeight;
+    let top = r.bottom + m;
+    if (top + th > window.innerHeight && r.top - m - th > 0) top = r.top - m - th;
+    let left = r.left + r.width / 2 - tw / 2;
+    left = Math.max(m, Math.min(left, window.innerWidth - tw - m));
+    top = Math.max(m, Math.min(top, window.innerHeight - th - m));
+    t.style.left = (left + window.scrollX) + "px";
+    t.style.top = (top + window.scrollY) + "px";
+  }
+  function show(a, key, m2) {
+    clearTimeout(timer);
+    const t = ensure(); t.innerHTML = buildHtml(key); t.classList.add("visible");
+    place(a); anchor = a; mode = m2;
+    a.setAttribute("aria-describedby", t.id);
+  }
+  function hide() {
+    if (tip) tip.classList.remove("visible");
+    if (anchor) anchor.removeAttribute("aria-describedby");
+    anchor = null; mode = null;
+  }
+  function scheduleHide() { clearTimeout(timer); timer = setTimeout(hide, 140); }
+
+  /** key 에 매핑된 ⓘ 아이콘 버튼을 생성한다(재사용 가능). */
+  function createIcon(key) {
+    const info = TOOLTIP_INFO[key];
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "info-icon"; b.textContent = "i";
+    b.setAttribute("aria-label", (info ? info.title : key) + " 설명");
+    // PC: hover / 키보드: focus
+    b.addEventListener("mouseenter", () => { if (mode !== "pinned") show(b, key, "hover"); });
+    b.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
+    b.addEventListener("focus", () => { if (mode !== "pinned") show(b, key, "hover"); });
+    b.addEventListener("blur", () => { if (mode === "hover") hide(); });
+    // 모바일/터치: click 으로 고정 토글
+    b.addEventListener("click", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (mode === "pinned" && anchor === b) hide();
+      else show(b, key, "pinned");
+    });
+    return b;
+  }
+
+  /** 화면 내 옵션/파라미터 요소를 찾아 아이콘을 자동 부착한다. */
+  function init() {
+    document.querySelectorAll(".grid-opts label, .param").forEach((c) => {
+      const input = c.querySelector("input");
+      if (!input || !TOOLTIP_INFO[input.id]) return;
+      const target = c.classList.contains("param") ? c.querySelector("label") : c;
+      target.appendChild(createIcon(input.id));
+    });
+    // 바깥 클릭/ESC 로 닫기(고정된 툴팁 포함)
+    document.addEventListener("click", (e) => {
+      if (mode === "pinned" && !e.target.closest(".info-icon") && !e.target.closest(".info-tooltip")) hide();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
+    window.addEventListener("resize", hide);
+    window.addEventListener("scroll", () => { if (anchor) place(anchor); }, true);
+  }
+  return { init, createIcon };
+})();
+
+InfoTooltip.init();
+window.__infoTooltip = InfoTooltip;
+</script>
+</body>
+</html>
