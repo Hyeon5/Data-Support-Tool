@@ -159,8 +159,8 @@
 </head>
 <body>
 <header>
-  <h1>AI 기반 데이터 이상치 탐지 프로그램</h1>
-  <p>내부망(오프라인) 환경 · 설치 불필요 · 단일 HTML 파일로 브라우저에서 실행</p>
+  <h1>데이터 이상치 탐지 프로그램</h1>
+  <p>오프라인(로컬) 환경 · HTML 파일 · JS 기반</p>
 </header>
 
 <div class="wrap">
@@ -208,9 +208,9 @@
       <label><input type="checkbox" id="opt_change" checked> 증감률 검사</label>
       <label><input type="checkbox" id="opt_iqr" checked> IQR</label>
       <label><input type="checkbox" id="opt_zscore" checked> Z-Score</label>
-      <label><input type="checkbox" id="opt_iforest" checked> Isolation Forest</label>
-      <label><input type="checkbox" id="opt_lof" checked> Local Outlier Factor (LOF)</label>
-      <label><input type="checkbox" id="opt_dbscan" checked> DBSCAN</label>
+      <label><input type="checkbox" id="opt_iforest"> Isolation Forest</label>
+      <label><input type="checkbox" id="opt_lof"> Local Outlier Factor (LOF)</label>
+      <label><input type="checkbox" id="opt_dbscan"> DBSCAN</label>
     </div>
   </div>
 
@@ -338,6 +338,7 @@
       <div class="params" style="margin-top:12px;">
         <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1"></div>
         <div class="param"><label>변화량 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1"></div>
+        <div class="param"><label>IQR 기준 변화율 (%)</label><input type="number" id="p_cmp_z" value="-" step="0.1" min="0.1" disabled></div>
       </div>
     </div>
 
