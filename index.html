@@ -63,6 +63,7 @@
   .progress-outer{background:#e4e9f2; border-radius:20px; height:16px; overflow:hidden;}
   .progress-inner{background:var(--accent); height:100%; width:0%; transition:width .2s;}
   #status{margin-top:8px; font-size:13px; color:var(--muted); text-align:center;}
+  #cmpStatus{margin-top:8px; font-size:13px; color:var(--muted); text-align:center;}
   .summary{display:flex; gap:24px; flex-wrap:wrap; margin-bottom:10px;}
   .summary .stat{background:#eef2f7; border-radius:8px; padding:10px 16px;}
   .summary .stat b{font-size:20px; display:block;}
@@ -170,9 +171,15 @@
 </style>
 </head>
 <body>
-<header>
-  <h1>데이터 이상치 탐지 프로그램</h1>
-  <p>오프라인(로컬) 환경 · HTML 파일 · JS 기반</p>
+<header style="display:flex; justify-content:space-between; align-items:center;">
+  <div>
+    <h1>데이터 이상치 탐지 프로그램</h1>
+    <p>오프라인(로컬) 환경 · HTML 파일 · JS 기반</p>
+  </div>
+  <div style="font-size:20px; text-align:right;">
+    <p>한국산업단지공단 33기</p>
+    <h1>3조</h1>
+  </div>
 </header>
 
 <div class="wrap">
@@ -318,7 +325,7 @@
                aria-label="파일 A 업로드 영역. CSV 또는 XLSX 파일을 드래그하거나 클릭하여 업로드합니다.">
             <div class="dz-badge">A</div>
             <div class="dz-text" id="dzAText">파일 A를 여기에 드래그하거나 클릭하여 업로드</div>
-            <div class="dz-sub muted" id="dzASub">기준(이전) 데이터 · CSV / XLSX</div>
+            <div class="dz-sub muted" id="dzASub">기준 데이터 · CSV / XLSX</div>
             <button type="button" id="dzAClear" class="dz-clear hidden" aria-label="파일 A 제거">✕ 제거</button>
           </div>
           <input type="file" id="fileA" accept=".csv,.xlsx,.xls" class="hidden">
@@ -328,7 +335,7 @@
                aria-label="파일 B 업로드 영역. CSV 또는 XLSX 파일을 드래그하거나 클릭하여 업로드합니다.">
             <div class="dz-badge">B</div>
             <div class="dz-text" id="dzBText">파일 B를 여기에 드래그하거나 클릭하여 업로드</div>
-            <div class="dz-sub muted" id="dzBSub">비교(이후) 데이터 · CSV / XLSX</div>
+            <div class="dz-sub muted" id="dzBSub">비교 데이터 · CSV / XLSX</div>
             <button type="button" id="dzBClear" class="dz-clear hidden" aria-label="파일 B 제거">✕ 제거</button>
           </div>
           <input type="file" id="fileB" accept=".csv,.xlsx,.xls" class="hidden">
@@ -359,9 +366,8 @@
         <label><input type="checkbox" id="opt_cmp_iqr" checked> IQR 기반 변화량</label>
       </div>
       <div class="params2" style="margin-top:12px;">
-        <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1"></div>
-        <div class="param"><label>변화 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1"></div>
-        <div class="param"><label>IQR 기준 변화율 (%)</label><input type="number" id="p_cmp_z_dummy" value="" step="0.1" min="0.1" disabled></div>
+        <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1" style="align-items:center margin-right:10px"></div>
+        <div class="param"><label>변화 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1" style="align-items:center margin-right:10px"></div>
       </div>
     </div>
 
@@ -1536,10 +1542,10 @@ const CsvReader = (function () {
   function decode(buffer) {
     // 인코딩 자동: utf-8 시도 후 대체문자(U+FFFD) 있으면 euc-kr 재시도
     let text = new TextDecoder("utf-8").decode(buffer);
-    if (text.indexOf("�") >= 0) {
+    if (text.indexOf(" ") >= 0) {
       try {
         const alt = new TextDecoder("euc-kr").decode(buffer);
-        if (alt.indexOf("�") < 0) text = alt;
+        if (alt.indexOf(" ") < 0) text = alt;
       } catch (e) { /* euc-kr 미지원 시 utf-8 유지 */ }
     }
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM 제거
