@@ -207,6 +207,9 @@
     </div>
     <div id="dzError" class="dz-error hidden" role="alert" aria-live="assertive"></div>
 
+    <div id="sheetRow" class="hidden" style="margin-top:8px;">
+      <label class="muted">시트 선택&nbsp;<select id="sheetSelect" aria-label="분석할 시트 선택"></select></label>
+    </div>
     <div id="fileInfo" class="note"></div>
   </div>
 
@@ -322,6 +325,9 @@
             <button type="button" id="dzAClear" class="dz-clear hidden" aria-label="파일 A 제거">✕ 제거</button>
           </div>
           <input type="file" id="fileA" accept=".csv,.xlsx,.xls" class="hidden">
+          <div id="sheetRowA" class="hidden" style="margin-top:6px;">
+            <label class="muted">시트&nbsp;<select id="sheetA" aria-label="파일 A 시트 선택"></select></label>
+          </div>
         </div>
         <div>
           <div class="dropzone dz-mini" id="dzB" tabindex="0" role="button"
@@ -332,6 +338,9 @@
             <button type="button" id="dzBClear" class="dz-clear hidden" aria-label="파일 B 제거">✕ 제거</button>
           </div>
           <input type="file" id="fileB" accept=".csv,.xlsx,.xls" class="hidden">
+          <div id="sheetRowB" class="hidden" style="margin-top:6px;">
+            <label class="muted">시트&nbsp;<select id="sheetB" aria-label="파일 B 시트 선택"></select></label>
+          </div>
         </div>
       </div>
       <div id="cmpFileError" class="dz-error hidden" role="alert" aria-live="assertive"></div>
@@ -1114,13 +1123,81 @@ function colLettersToIndex(letters) {
   return idx - 1;
 }
 
+/* ---- 표 위치/헤더 자동 탐지: 2차원 grid -> {columns, rows} ---- */
+// 제목 행·앞쪽 빈 행/열·중간부터 시작하는 데이터 등 다양한 형태를 인식한다.
+// 깨끗한 A1 표는 기존과 동일하게 첫 행을 헤더로 사용한다.
+function gridToTable(grid) {
+  if (!grid || !grid.length) return { columns: [], rows: [] };
+  let width = 0;
+  for (const r of grid) if (r && r.length > width) width = r.length;
+  if (width === 0) return { columns: [], rows: [] };
+  const isBlank = (v) => Values.isMissing(v);
+  const rowFilled = grid.map((r) => {
+    const cols = [];
+    for (let c = 0; c < width; c++) if (r && !isBlank(r[c])) cols.push(c);
+    return cols;
+  });
+  const counts = rowFilled.map((s) => s.length);
+  let maxCount = 0;
+  for (const c of counts) if (c > maxCount) maxCount = c;
+  if (maxCount === 0) return { columns: [], rows: [] };
+
+  const N = grid.length;
+  const isTextVal = (v) => !isBlank(v) && Values.toNumber(v) === null && !(v instanceof Date);
+
+  // 헤더 후보 점수화: 텍스트 비율이 높고, 표 폭에 가깝고, 아래에 데이터가 있는 행을 선호한다.
+  let headerRow = -1, bestScore = -1;
+  const scanLimit = Math.min(N, 50);
+  for (let r = 0; r < scanLimit; r++) {
+    const filled = rowFilled[r];
+    if (filled.length < Math.max(2, Math.ceil(maxCount * 0.5))) continue;
+    let hasDataBelow = false;
+    for (let k = r + 1; k < N; k++) {
+      if (counts[k] >= Math.max(1, Math.floor(filled.length * 0.5))) { hasDataBelow = true; break; }
+    }
+    if (!hasDataBelow) continue;
+    const textCount = filled.filter((c) => isTextVal(grid[r][c])).length;
+    const textRatio = textCount / filled.length;
+    if (textRatio < 0.5) continue;
+    // 텍스트 비율을 최우선으로, 폭 보너스, 위쪽 행에 소폭 가점(먼저 나온 헤더 선호)
+    const score = textRatio * 3 + filled.length / maxCount - r * 0.01;
+    if (score > bestScore) { bestScore = score; headerRow = r; }
+  }
+  if (headerRow < 0) {
+    // 텍스트 헤더를 못 찾으면 채워진 칸이 충분한 첫 행(숫자 헤더 등)을 헤더로 본다.
+    for (let r = 0; r < N; r++) if (counts[r] >= Math.max(2, maxCount * 0.5)) { headerRow = r; break; }
+    if (headerRow < 0) for (let r = 0; r < N; r++) if (counts[r] > 0) { headerRow = r; break; }
+  }
+
+  // 열 범위: 헤더행 + 이후 데이터행에서 채워진 열 전체(앞쪽 빈 열 자동 제외)
+  let left = Infinity, right = -1;
+  const scan = (cols) => { for (const c of cols) { if (c < left) left = c; if (c > right) right = c; } };
+  scan(rowFilled[headerRow]);
+  for (let r = headerRow + 1; r < N; r++) scan(rowFilled[r]);
+  if (right < 0) { left = 0; right = width - 1; }
+
+  const columns = [];
+  for (let c = left; c <= right; c++) {
+    const v = grid[headerRow][c];
+    columns.push(isBlank(v) ? ("열" + (c - left + 1)) : Values.cellText(v));
+  }
+  const rows = [];
+  for (let r = headerRow + 1; r < N; r++) {
+    const src = grid[r] || [];
+    let any = false; const row = [];
+    for (let c = left; c <= right; c++) {
+      const v = src[c];
+      row.push(v === undefined ? null : v);
+      if (!isBlank(v)) any = true;
+    }
+    if (any) rows.push(row);
+  }
+  return { columns, rows };
+}
+
 const XlsxReader = (function () {
   const parser = new DOMParser();
-
-  function textOf(el) {
-    // <t> 텍스트(들)을 이어붙임 (rich text 런 포함)
-    return el ? el.textContent : "";
-  }
+  const dec = new TextDecoder("utf-8");
 
   function parseSharedStrings(xml) {
     if (!xml) return [];
@@ -1128,7 +1205,6 @@ const XlsxReader = (function () {
     const sis = doc.getElementsByTagName("si");
     const result = [];
     for (let i = 0; i < sis.length; i++) {
-      // si 안의 모든 <t> 를 이어붙인다.
       const ts = sis[i].getElementsByTagName("t");
       let s = "";
       for (let j = 0; j < ts.length; j++) s += ts[j].textContent;
@@ -1138,7 +1214,6 @@ const XlsxReader = (function () {
   }
 
   function parseDateStyles(xml) {
-    // styleIndex(cellXfs 순서) -> 날짜 형식 여부
     const isDate = {};
     if (!xml) return isDate;
     const doc = parser.parseFromString(xml, "application/xml");
@@ -1148,9 +1223,7 @@ const XlsxReader = (function () {
     for (let i = 0; i < numFmts.length; i++) {
       const id = parseInt(numFmts[i].getAttribute("numFmtId"), 10);
       const code = (numFmts[i].getAttribute("formatCode") || "").toLowerCase();
-      // 날짜/시간 서식 문자가 있고 통화기호 등이 없으면 날짜로 간주
-      if (/[dy]/.test(code) && /(yy|mm|dd|d|y|hh|ss)/.test(code) && !/[#]/.test(code))
-        customDate.add(id);
+      if (/[dy]/.test(code) && /(yy|mm|dd|d|y|hh|ss)/.test(code) && !/[#]/.test(code)) customDate.add(id);
     }
     const cellXfsEl = doc.getElementsByTagName("cellXfs")[0];
     if (!cellXfsEl) return isDate;
@@ -1162,44 +1235,54 @@ const XlsxReader = (function () {
     return isDate;
   }
 
-  function firstSheetPath(files) {
-    // workbook.xml + rels 로 첫 시트의 실제 경로를 찾는다. 실패 시 sheet1.xml.
+  // workbook.xml + rels 로 모든 시트의 (이름, 경로) 목록을 문서 순서대로 반환한다.
+  function parseSheets(files) {
     try {
-      const wb = parser.parseFromString(new TextDecoder().decode(files["xl/workbook.xml"]), "application/xml");
-      const sheet = wb.getElementsByTagName("sheet")[0];
-      const rid = sheet.getAttribute("r:id") || sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
-      const relsXml = new TextDecoder().decode(files["xl/_rels/workbook.xml.rels"]);
-      const rels = parser.parseFromString(relsXml, "application/xml");
-      const rs = rels.getElementsByTagName("Relationship");
-      for (let i = 0; i < rs.length; i++) {
-        if (rs[i].getAttribute("Id") === rid) {
-          let target = rs[i].getAttribute("Target");
-          if (target.charAt(0) === "/") return target.substring(1);
-          return "xl/" + target.replace(/^\.\//, "");
-        }
+      const wbDoc = parser.parseFromString(dec.decode(files["xl/workbook.xml"]), "application/xml");
+      const relsXml = files["xl/_rels/workbook.xml.rels"] ? dec.decode(files["xl/_rels/workbook.xml.rels"]) : "";
+      const relsDoc = relsXml ? parser.parseFromString(relsXml, "application/xml") : null;
+      const relMap = {};
+      if (relsDoc) {
+        const rs = relsDoc.getElementsByTagName("Relationship");
+        for (let i = 0; i < rs.length; i++) relMap[rs[i].getAttribute("Id")] = rs[i].getAttribute("Target");
       }
-    } catch (e) { /* 폴백 사용 */ }
-    return "xl/worksheets/sheet1.xml";
+      const RELS_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+      const sheetEls = wbDoc.getElementsByTagName("sheet");
+      const out = [];
+      for (let i = 0; i < sheetEls.length; i++) {
+        const rid = sheetEls[i].getAttribute("r:id") || sheetEls[i].getAttributeNS(RELS_NS, "id");
+        let target = relMap[rid];
+        let path;
+        if (target) path = target.charAt(0) === "/" ? target.substring(1) : "xl/" + target.replace(/^\.\//, "");
+        else path = "xl/worksheets/sheet" + (i + 1) + ".xml";
+        out.push({ name: sheetEls[i].getAttribute("name") || ("Sheet" + (i + 1)), path });
+      }
+      if (out.length) return out;
+    } catch (e) { /* 폴백 */ }
+    return [{ name: "Sheet1", path: "xl/worksheets/sheet1.xml" }];
   }
 
-  function read(bytes) {
+  function open(bytes) {
     const files = Zip.read(bytes);
-    const dec = new TextDecoder("utf-8");
-    const shared = parseSharedStrings(files["xl/sharedStrings.xml"] ? dec.decode(files["xl/sharedStrings.xml"]) : null);
-    const isDate = parseDateStyles(files["xl/styles.xml"] ? dec.decode(files["xl/styles.xml"]) : null);
+    return {
+      files,
+      shared: parseSharedStrings(files["xl/sharedStrings.xml"] ? dec.decode(files["xl/sharedStrings.xml"]) : null),
+      isDate: parseDateStyles(files["xl/styles.xml"] ? dec.decode(files["xl/styles.xml"]) : null),
+      sheets: parseSheets(files),
+    };
+  }
 
-    const sheetPath = firstSheetPath(files);
-    if (!files[sheetPath]) throw new Error("xlsx: 시트를 찾을 수 없습니다.");
-    const doc = parser.parseFromString(dec.decode(files[sheetPath]), "application/xml");
+  // 지정 시트를 2차원 grid(행 1..maxRow, 앞쪽 빈 행/열 포함)로 반환한다.
+  function grid(wb, index) {
+    const sheet = wb.sheets[index || 0];
+    if (!sheet || !wb.files[sheet.path]) throw new Error("xlsx: 선택한 시트를 찾을 수 없습니다.");
+    const doc = parser.parseFromString(dec.decode(wb.files[sheet.path]), "application/xml");
     const rowsEls = doc.getElementsByTagName("row");
-
-    // (rowNum -> {colIdx -> value}) 형태로 수집
-    const cellMap = {};
-    let maxCol = -1, minRow = Infinity, maxRow = -1;
+    const cellMap = {}; let maxCol = -1, maxRow = 0;
     for (let r = 0; r < rowsEls.length; r++) {
       const rowEl = rowsEls[r];
       const rowNum = parseInt(rowEl.getAttribute("r") || String(r + 1), 10);
-      minRow = Math.min(minRow, rowNum); maxRow = Math.max(maxRow, rowNum);
+      if (rowNum > maxRow) maxRow = rowNum;
       const cs = rowEl.getElementsByTagName("c");
       const rowObj = cellMap[rowNum] || (cellMap[rowNum] = {});
       for (let c = 0; c < cs.length; c++) {
@@ -1207,7 +1290,7 @@ const XlsxReader = (function () {
         const ref = cell.getAttribute("r") || "";
         const letters = ref.replace(/[0-9]/g, "");
         const colIdx = letters ? colLettersToIndex(letters) : c;
-        maxCol = Math.max(maxCol, colIdx);
+        if (colIdx > maxCol) maxCol = colIdx;
         const t = cell.getAttribute("t");
         const s = cell.getAttribute("s");
         let value = null;
@@ -1219,47 +1302,39 @@ const XlsxReader = (function () {
           const vEl = cell.getElementsByTagName("v")[0];
           const raw = vEl ? vEl.textContent : null;
           if (raw === null || raw === "") value = null;
-          else if (t === "s") value = shared[parseInt(raw, 10)] ?? "";
+          else if (t === "s") value = wb.shared[parseInt(raw, 10)] ?? "";
           else if (t === "str") value = raw;
           else if (t === "b") value = (raw === "1");
-          else if (t === "e") value = raw; // error
+          else if (t === "e") value = raw;
           else {
-            // 숫자. 날짜 서식이면 Date 로 변환.
             const num = Number(raw);
-            if (s !== null && isDate[parseInt(s, 10)]) value = excelSerialToDate(num);
+            if (s !== null && wb.isDate[parseInt(s, 10)]) value = excelSerialToDate(num);
             else value = num;
           }
         }
         rowObj[colIdx] = value;
       }
     }
-    if (maxRow < 0) return { columns: [], rows: [] };
-
-    // 헤더 = 최소 행. 데이터 = 그 이후.
-    const headerObj = cellMap[minRow] || {};
-    const columns = [];
-    for (let c = 0; c <= maxCol; c++) {
-      const h = headerObj[c];
-      columns.push(Values.isMissing(h) ? ("열" + (c + 1)) : Values.cellText(h));
-    }
-    const rows = [];
-    for (let rn = minRow + 1; rn <= maxRow; rn++) {
+    const out = [];
+    for (let rn = 1; rn <= maxRow; rn++) {
       const obj = cellMap[rn];
-      if (!obj) continue;
-      const row = [];
-      for (let c = 0; c <= maxCol; c++) row.push(c in obj ? obj[c] : null);
-      rows.push(row);
+      const row = new Array(maxCol + 1).fill(null);
+      if (obj) for (const c in obj) row[c] = obj[c];
+      out.push(row);
     }
-    return { columns, rows };
+    return out;
   }
-  return { read };
+
+  // 호환: 첫 시트를 자동 탐지하여 {columns, rows} 반환
+  function read(bytes, index) { return gridToTable(grid(open(bytes), index || 0)); }
+  return { open, grid, read };
 })();
 
 const XlsReader = (function () {
-  // BIFF8(.xls) 최소 리더 — 일반적인 문자열/숫자 셀을 처리하는 best-effort 구현.
+  // BIFF8(.xls) 리더 — 여러 시트/OLE2 컨테이너/날짜 서식 지원(best-effort).
   function rkToNumber(rk) {
     let f;
-    if (rk & 0x02) { f = rk >> 2; }               // 정수
+    if (rk & 0x02) { f = rk >> 2; }
     else {
       const buf = new ArrayBuffer(8); const dv = new DataView(buf);
       dv.setInt32(0, 0, true); dv.setInt32(4, rk & 0xFFFFFFFC, true);
@@ -1268,7 +1343,6 @@ const XlsReader = (function () {
     if (rk & 0x01) f /= 100;
     return f;
   }
-  // 연속 청크에 걸친 유니코드 문자열 리더 (SST 용)
   function makeSSTReader(chunks) {
     let ci = 0, ci_pos = 0;
     function u8() { const b = chunks[ci][ci_pos++]; ensure(); return b; }
@@ -1285,7 +1359,6 @@ const XlsReader = (function () {
       if (ext) cbExt = u32();
       let str = "", read = 0;
       while (read < cch) {
-        // 청크 경계에서 문자열 데이터가 끊기면 새 grbit 을 읽는다.
         if (ci_pos >= chunks[ci].length) {
           ci++; ci_pos = 0;
           if (ci >= chunks.length) break;
@@ -1295,14 +1368,14 @@ const XlsReader = (function () {
         else { str += String.fromCharCode(u8()); }
         read++;
       }
-      for (let i = 0; i < cRun; i++) { u16(); u16(); }       // rich runs 건너뛰기
-      for (let i = 0; i < cbExt; i++) { u8(); }              // ext 데이터 건너뛰기
+      for (let i = 0; i < cRun; i++) { u16(); u16(); }
+      for (let i = 0; i < cbExt; i++) { u8(); }
       return str;
     }
     return { readString, atEnd };
   }
 
-  /** OLE2(CFB) 컨테이너에서 "Workbook"/"Book" 스트림을 추출한다.
+    /** OLE2(CFB) 컨테이너에서 "Workbook"/"Book" 스트림을 추출한다.
    *  실제 Excel 이 저장하는 .xls 는 BIFF 스트림이 이 컨테이너 안에 들어 있다. */
   function cfbExtract(bytes) {
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -1388,29 +1461,23 @@ const XlsReader = (function () {
     return out;
   }
 
-  function read(bytes) {
-    // OLE2 컨테이너(실제 .xls)면 내부의 Workbook 스트림을 꺼내 BIFF 로 해석한다.
+  function open(bytes) {
     if (bytes.length > 512 && bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0) {
       const stream = cfbExtract(bytes);
       if (!stream) throw new Error("xls 파일에서 Workbook 스트림을 찾지 못했습니다. 파일이 손상되었을 수 있습니다.");
       bytes = stream;
     }
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    let p = 0;
-    // 레코드 순회
-    const records = [];
+    // 레코드 순회(헤더 오프셋 = start-4)
+    const records = []; let p = 0;
     while (p + 4 <= bytes.length) {
       const type = dv.getUint16(p, true);
       const len = dv.getUint16(p + 2, true);
       records.push({ type, start: p + 4, len });
       p += 4 + len;
-      if (type === 0x000A && p >= bytes.length) break; // EOF
     }
-    // 셀 서식 수집: XF(0x00E0) 의 ifmt, FORMAT(0x041E) 의 사용자 서식, DATEMODE(0x0022)
-    // 를 해석하여 "날짜 서식이 적용된 XF 인덱스" 를 판별한다.
-    const xfFmt = [];            // XF 등장 순서 -> ifmt
-    const fmtCode = new Map();   // ifmt -> 서식 문자열
-    let is1904 = false;
+    // 전역: XF/FORMAT/DATEMODE(날짜 판별)
+    const xfFmt = []; const fmtCode = new Map(); let is1904 = false;
     const BUILTIN_DATE = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
     function readUnicodeAt(off) {
       const cch = dv.getUint16(off, true); const grbit = dv.getUint8(off + 2);
@@ -1425,7 +1492,7 @@ const XlsReader = (function () {
       if (rec.type === 0x00E0) xfFmt.push(dv.getUint16(rec.start + 2, true));
       else if (rec.type === 0x041E) {
         const ifmt = dv.getUint16(rec.start, true);
-        try { fmtCode.set(ifmt, readUnicodeAt(rec.start + 2)); } catch (e) { /* 서식 없음 */ }
+        try { fmtCode.set(ifmt, readUnicodeAt(rec.start + 2)); } catch (e) { /* 없음 */ }
       } else if (rec.type === 0x0022) is1904 = dv.getUint16(rec.start, true) === 1;
     }
     function isDateXf(ixfe) {
@@ -1435,14 +1502,11 @@ const XlsReader = (function () {
       const code = (fmtCode.get(ifmt) || "").toLowerCase();
       return /[dy]/.test(code) && /(yy|mm|dd|d|y|hh|ss)/.test(code) && !/[#]/.test(code);
     }
-    const asValue = (num, ixfe) => (isDateXf(ixfe) ? excelSerialToDate(num, is1904) : num);
-
-    // SST 수집 (뒤따르는 CONTINUE 0x003C 포함)
+    // 전역: SST(공유 문자열)
     let sst = [];
     for (let i = 0; i < records.length; i++) {
       if (records[i].type === 0x00FC) {
         const chunks = [];
-        // SST 본문은 header(8바이트: cstTotal,cstUnique) 이후부터
         const hdr = records[i].start;
         const cstUnique = dv.getUint32(hdr + 4, true);
         chunks.push(bytes.subarray(hdr + 8, hdr + 8 + records[i].len - 8));
@@ -1458,54 +1522,70 @@ const XlsReader = (function () {
         break;
       }
     }
-    // 셀 수집
-    const cellMap = {}; let maxCol = -1, minRow = Infinity, maxRow = -1;
+    // 전역: BOUNDSHEET(시트 이름 + 각 시트 BOF 의 스트림 위치)
+    const sheets = [];
+    for (const rec of records) {
+      if (rec.type === 0x0085) {
+        const s = rec.start;
+        const pos = dv.getUint32(s, true);
+        const cch = dv.getUint8(s + 6); const grbit = dv.getUint8(s + 7);
+        let name = "", off = s + 8;
+        for (let k = 0; k < cch; k++) {
+          if (grbit & 1) { name += String.fromCharCode(dv.getUint16(off, true)); off += 2; }
+          else { name += String.fromCharCode(dv.getUint8(off)); off += 1; }
+        }
+        sheets.push({ name: name || ("Sheet" + (sheets.length + 1)), pos });
+      }
+    }
+    if (!sheets.length) sheets.push({ name: "Sheet1", pos: 0 });
+    return { dv, bytes, records, sst, is1904, isDateXf, sheets };
+  }
+
+  // 지정 시트 범위의 셀만 모아 2차원 grid 로 반환한다.
+  function grid(wb, index) {
+    const { dv, records, sst, is1904, isDateXf, sheets } = wb;
+    const asValue = (num, ixfe) => (isDateXf(ixfe) ? excelSerialToDate(num, is1904) : num);
+    const sel = sheets[index || 0] || sheets[0];
+    // 시트 위치 범위 계산(다음 시트 BOF 직전까지)
+    const positions = sheets.map((s) => s.pos).filter((p) => p > 0).sort((a, b) => a - b);
+    let start = sel.pos, end = Infinity;
+    for (const pp of positions) if (pp > sel.pos) { end = pp; break; }
+    const inRange = (rec) => { const h = rec.start - 4; return h >= start && h < end; };
+    // 단일 시트이거나 위치 정보가 없으면 전체 레코드 사용
+    const useAll = positions.length <= 1;
+
+    const cellMap = {}; let maxCol = -1, maxRow = 0;
     function put(row, col, val) {
       (cellMap[row] || (cellMap[row] = {}))[col] = val;
-      maxCol = Math.max(maxCol, col); minRow = Math.min(minRow, row); maxRow = Math.max(maxRow, row);
+      if (col > maxCol) maxCol = col; if (row + 1 > maxRow) maxRow = row + 1;
     }
     let lastFormulaCell = null;
     for (const rec of records) {
+      if (!useAll && !inRange(rec)) continue;
       const s = rec.start;
       switch (rec.type) {
-        case 0x00FD: { // LABELSST
-          const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
-          const isst = dv.getUint32(s + 6, true);
-          put(row, col, sst[isst] ?? ""); break;
-        }
-        case 0x0203: { // NUMBER
-          const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
-          const ixfe = dv.getUint16(s + 4, true);
-          put(row, col, asValue(dv.getFloat64(s + 6, true), ixfe)); break;
-        }
-        case 0x027E: { // RK
-          const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
-          const ixfe = dv.getUint16(s + 4, true);
-          put(row, col, asValue(rkToNumber(dv.getUint32(s + 6, true)), ixfe)); break;
-        }
-        case 0x00BD: { // MULRK
+        case 0x00FD: { const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true); put(row, col, sst[dv.getUint32(s + 6, true)] ?? ""); break; }
+        case 0x0203: { const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true); put(row, col, asValue(dv.getFloat64(s + 6, true), dv.getUint16(s + 4, true))); break; }
+        case 0x027E: { const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true); put(row, col, asValue(rkToNumber(dv.getUint32(s + 6, true)), dv.getUint16(s + 4, true))); break; }
+        case 0x00BD: {
           const row = dv.getUint16(s, true), first = dv.getUint16(s + 2, true);
           const last = dv.getUint16(s + rec.len - 2, true);
           let off = s + 4;
-          for (let c = first; c <= last; c++) {
-            const ixfe = dv.getUint16(off, true);
-            const rk = dv.getUint32(off + 2, true);
-            put(row, c, asValue(rkToNumber(rk), ixfe)); off += 6;
-          }
+          for (let c = first; c <= last; c++) { const ixfe = dv.getUint16(off, true); const rk = dv.getUint32(off + 2, true); put(row, c, asValue(rkToNumber(rk), ixfe)); off += 6; }
           break;
         }
-        case 0x0204: { // LABEL (BIFF8 unicode)
+        case 0x0204: {
           const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
           const cch = dv.getUint16(s + 6, true); const grbit = dv.getUint8(s + 8);
           let str = "", off = s + 9;
           for (let k = 0; k < cch; k++) { if (grbit & 1) { str += String.fromCharCode(dv.getUint16(off, true)); off += 2; } else { str += String.fromCharCode(dv.getUint8(off)); off += 1; } }
           put(row, col, str); break;
         }
-        case 0x0006: lastFormulaCell = { row: dv.getUint16(s, true), col: dv.getUint16(s + 2, true), num: dv.getFloat64(s + 6, true), isText: dv.getUint8(s + 12) === 0 && dv.getUint16(s + 6, true) === 0 && dv.getUint16(s + 12, true) === 0xFFFF }; // FORMULA
-          // 숫자 결과면 바로 기록 (문자열 결과는 후속 STRING 레코드)
+        case 0x0006:
+          lastFormulaCell = { row: dv.getUint16(s, true), col: dv.getUint16(s + 2, true), num: dv.getFloat64(s + 6, true) };
           if (!(dv.getUint16(s + 12, true) === 0xFFFF)) put(lastFormulaCell.row, lastFormulaCell.col, lastFormulaCell.num);
           break;
-        case 0x0207: { // STRING (직전 FORMULA 의 문자열 결과)
+        case 0x0207: {
           if (lastFormulaCell) {
             const cch = dv.getUint16(s, true); const grbit = dv.getUint8(s + 2);
             let str = "", off = s + 3;
@@ -1517,24 +1597,22 @@ const XlsReader = (function () {
         default: break;
       }
     }
-    if (maxRow < 0) return { columns: [], rows: [] };
-    const headerObj = cellMap[minRow] || {};
-    const columns = [];
-    for (let c = 0; c <= maxCol; c++) columns.push(Values.isMissing(headerObj[c]) ? ("열" + (c + 1)) : Values.cellText(headerObj[c]));
-    const rows = [];
-    for (let rn = minRow + 1; rn <= maxRow; rn++) {
-      const obj = cellMap[rn]; if (!obj) continue;
-      const row = []; for (let c = 0; c <= maxCol; c++) row.push(c in obj ? obj[c] : null);
-      rows.push(row);
+    const out = [];
+    for (let rn = 0; rn < maxRow; rn++) {
+      const obj = cellMap[rn];
+      const row = new Array(maxCol + 1).fill(null);
+      if (obj) for (const c in obj) row[c] = obj[c];
+      out.push(row);
     }
-    return { columns, rows };
+    return out;
   }
-  return { read };
+
+  function read(bytes, index) { return gridToTable(grid(open(bytes), index || 0)); }
+  return { open, grid, read };
 })();
 
 const CsvReader = (function () {
   function decode(buffer) {
-    // 인코딩 자동: utf-8 시도 후 대체문자(U+FFFD) 있으면 euc-kr 재시도
     let text = new TextDecoder("utf-8").decode(buffer);
     if (text.indexOf("�") >= 0) {
       try {
@@ -1542,13 +1620,12 @@ const CsvReader = (function () {
         if (alt.indexOf("�") < 0) text = alt;
       } catch (e) { /* euc-kr 미지원 시 utf-8 유지 */ }
     }
-    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM 제거
+    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
     return text;
   }
-  // 큰 파일에서도 UI 가 멈추지 않도록 청크 단위로 파싱하며 진행률을 보고한다.
   async function parse(text, onProgress) {
     const rows = []; let row = [], field = "", inQuotes = false;
-    const CHUNK = 262144; // 256K 문자마다 이벤트 루프에 양보
+    const CHUNK = 262144;
     for (let i = 0; i < text.length; i++) {
       if (onProgress && i > 0 && i % CHUNK === 0) {
         onProgress(Math.round((i / text.length) * 100));
@@ -1569,42 +1646,50 @@ const CsvReader = (function () {
     if (field !== "" || row.length) { row.push(field); rows.push(row); }
     return rows;
   }
-  async function read(buffer, onProgress) {
-    const raw = (await parse(decode(buffer), onProgress)).filter(r => !(r.length === 1 && r[0] === ""));
-    if (!raw.length) return { columns: [], rows: [] };
-    const columns = raw[0].map((c, i) => (c && c.trim() !== "") ? c : ("열" + (i + 1)));
-    const rows = raw.slice(1);
-    // 각 행 길이를 헤더에 맞춤
-    rows.forEach(r => { while (r.length < columns.length) r.push(""); });
-    return { columns, rows };
-  }
-  return { read, parse, decode };
+  // 2차원 grid 반환(헤더/영역 탐지는 gridToTable 이 담당)
+  async function readGrid(buffer, onProgress) { return await parse(decode(buffer), onProgress); }
+  async function read(buffer, onProgress) { return gridToTable(await readGrid(buffer, onProgress)); }
+  return { read, readGrid, parse, decode };
 })();
 
-/** 확장자에 따라 적절한 리더로 파일을 읽어 Table 을 반환한다.
- *  onProgress(0~100, 메시지) 로 업로드/파싱 단계 진행률을 보고한다(선택). */
-async function readFile(file, onProgress) {
+/** 파일을 열어 시트 목록과 시트별 읽기 함수를 제공한다(다중 시트 지원).
+ *  반환: { sheets: [이름...], readSheet(index) => {columns, rows}, multi: boolean } */
+async function loadWorkbook(file, onProgress) {
   const report = (pct, msg) => { if (onProgress) onProgress(pct, msg); };
   const yieldUi = () => new Promise((r) => setTimeout(r, 0));
   const name = file.name.toLowerCase();
   report(5, "파일을 메모리로 읽고 있습니다...");
   const buf = new Uint8Array(await file.arrayBuffer());
-  let raw;
   if (name.endsWith(".csv")) {
     report(10, "CSV 내용을 해석하고 있습니다...");
-    raw = await CsvReader.read(buf, (p) => report(10 + Math.round(p * 0.85), "CSV 내용을 해석하고 있습니다... (" + p + "%)"));
-  } else if (name.endsWith(".xlsx")) {
+    const grid = await CsvReader.readGrid(buf, (p) => report(10 + Math.round(p * 0.85), "CSV 내용을 해석하고 있습니다... (" + p + "%)"));
+    report(100, "파일 읽기가 끝났습니다.");
+    return { sheets: ["(파일 전체)"], multi: false, readSheet: () => gridToTable(grid) };
+  }
+  if (name.endsWith(".xlsx")) {
     report(20, "압축을 해제하고 있습니다..."); await yieldUi();
-    raw = XlsxReader.read(buf);
-    report(85, "시트 내용을 정리하고 있습니다..."); await yieldUi();
-  } else if (name.endsWith(".xls")) {
+    const wb = XlsxReader.open(buf);
+    report(100, "파일 읽기가 끝났습니다.");
+    return { sheets: wb.sheets.map((s) => s.name), multi: wb.sheets.length > 1, readSheet: (i) => gridToTable(XlsxReader.grid(wb, i || 0)) };
+  }
+  if (name.endsWith(".xls")) {
     report(20, "엑셀(xls) 내용을 해석하고 있습니다..."); await yieldUi();
-    raw = XlsReader.read(buf);
-  } else throw new Error("지원하지 않는 파일 형식입니다.");
-  if (!raw.columns.length) throw new Error("데이터를 읽지 못했습니다(빈 파일 또는 형식 오류).");
-  report(100, "파일 읽기가 끝났습니다.");
-  return raw; // {columns, rows}
+    const wb = XlsReader.open(buf);
+    report(100, "파일 읽기가 끝났습니다.");
+    return { sheets: wb.sheets.map((s) => s.name), multi: wb.sheets.length > 1, readSheet: (i) => gridToTable(XlsReader.grid(wb, i || 0)) };
+  }
+  throw new Error("지원하지 않는 파일 형식입니다.");
 }
+
+/** (호환) 파일의 첫 시트를 {columns, rows} 로 반환한다. 기존 호출부에서 그대로 사용. */
+async function readFile(file, onProgress) {
+  const wb = await loadWorkbook(file, onProgress);
+  const raw = wb.readSheet(0);
+  if (!raw.columns.length) throw new Error("데이터를 읽지 못했습니다(빈 파일 또는 형식 오류).");
+  return raw;
+}
+// 시트 인식 UI 및 테스트에서 사용
+window.__readers = { loadWorkbook, readFile, gridToTable };
 
 /* =====================================================================
  * 7. 결과 Excel 작성기
@@ -1795,8 +1880,9 @@ const XlsxWriter = (function () {
   }
   /** 선택한 파일과 분석 상태를 모두 초기화한다(파일 제거/Reset). */
   function resetUpload() {
-    table = null; numericConfigs = []; lastResult = null;
+    table = null; numericConfigs = []; lastResult = null; currentWorkbook = null;
     renderNumericTable(); renderMissingAllowList();
+    $("sheetRow").classList.add("hidden");
     $("fileInfo").textContent = "";
     $("fileName").textContent = "선택된 파일이 없습니다.";
     $("fileName").classList.add("filecue");
@@ -1856,30 +1942,21 @@ const XlsxWriter = (function () {
     try {
       await new Promise((r) => setTimeout(r, 0)); // 로딩 표시가 그려질 기회를 준다
       // 업로드/파싱 단계 진행률을 진행 막대에 표시한다.
-      const raw = await readFile(file, (pct, msg) => { setProgress(pct); setStatus(msg); });
-      const columns = dedupeColumns(raw.columns);
-      table = new TableWrapper(columns, raw.rows);
-      const infos = ColumnAnalyzer.analyze(table);
-      numericConfigs = ColumnAnalyzer.buildNumericConfigs(table, infos);
-      renderNumericTable();
-      renderMissingAllowList();   // 결측 허용 컬럼 목록 갱신(기본 모두 해제)
-      const typeSummary = infos.map((i) => i.name + "(" + i.type + ")").join(", ");
-      $("fileInfo").textContent = "행 " + table.rows.length + " × 열 " + table.columns.length +
-        " · 숫자 컬럼 " + numericConfigs.length + "개 · 타입: " + typeSummary;
-      $("outName").value = file.name.replace(/\.[^.]+$/, "") + "_result.xlsx";
-      $("resultPanel").classList.add("hidden"); lastResult = null;
+      currentWorkbook = await loadWorkbook(file, (pct, msg) => { setProgress(pct); setStatus(msg); });
+      currentFileBase = file.name.replace(/\.[^.]+$/, "");
+      // 여러 시트가 있으면 시트 선택 드롭다운을 채워 보여준다(단일 시트는 숨김).
+      populateSheetSelect(currentWorkbook);
       // 업로드/파싱 완료: "업로드 중..." 을 지우고 드롭존에 파일명을 표시한다.
       setDzLoaded(displayName || file.name);
-      if (table.rows.length === 0)
-        setStatus("파일을 불러왔지만 분석할 데이터 행이 없습니다. (헤더만 있는 파일입니다)");
-      else
-        setStatus("파일을 불러왔습니다. [분석 시작] 버튼을 눌러 주세요.");
+      applyLoadedSheet(0); // 기본 첫 번째 시트로 표/설정 구성
     } catch (err) {
       console.error(err);
       setDzError("파일을 읽지 못했습니다: " + (err && err.message ? err.message : err));
       setStatus("파일을 읽지 못했습니다. 다른 파일로 다시 시도해 주세요.");
       // 실패 시 상태 초기화(부분 반영 방지) 및 기본 안내 문구 복원
+      currentWorkbook = null;
       table = null; numericConfigs = []; renderNumericTable(); renderMissingAllowList();
+      $("sheetRow").classList.add("hidden");
       $("fileInfo").textContent = ""; $("fileName").textContent = "선택된 파일이 없습니다.";
       $("fileName").classList.add("filecue");
       setDzDefault();
@@ -1888,6 +1965,53 @@ const XlsxWriter = (function () {
       $("fileInput").value = ""; // 같은 파일 재선택 시에도 change 가 발생하도록 초기화
     }
   }
+
+  // ----- 다중 시트 처리(단일 분석) -----
+  let currentWorkbook = null, currentFileBase = "";
+  /** 시트 목록으로 드롭다운을 채운다(2개 이상일 때만 노출). */
+  function populateSheetSelect(wb) {
+    const sel = $("sheetSelect");
+    sel.innerHTML = "";
+    wb.sheets.forEach((name, i) => {
+      const op = document.createElement("option");
+      op.value = String(i); op.textContent = name;
+      sel.appendChild(op);
+    });
+    sel.value = "0";
+    $("sheetRow").classList.toggle("hidden", !wb.multi);
+  }
+  /** 선택한 시트를 읽어 표/컬럼 분석/설정을 구성한다(파일 로드·시트 변경 공용). */
+  function applyLoadedSheet(index) {
+    const raw = currentWorkbook.readSheet(index);
+    if (!raw.columns.length) {
+      table = null; numericConfigs = []; renderNumericTable(); renderMissingAllowList();
+      $("fileInfo").textContent = "";
+      $("resultPanel").classList.add("hidden"); lastResult = null;
+      setStatus("선택한 시트에 데이터가 없습니다. 다른 시트를 선택해 주세요.");
+      return;
+    }
+    const columns = dedupeColumns(raw.columns);
+    table = new TableWrapper(columns, raw.rows);
+    const infos = ColumnAnalyzer.analyze(table);
+    numericConfigs = ColumnAnalyzer.buildNumericConfigs(table, infos);
+    renderNumericTable();
+    renderMissingAllowList();
+    const typeSummary = infos.map((i) => i.name + "(" + i.type + ")").join(", ");
+    const sheetName = currentWorkbook.sheets[index];
+    $("fileInfo").textContent = (currentWorkbook.multi ? "시트 '" + sheetName + "' · " : "") +
+      "행 " + table.rows.length + " × 열 " + table.columns.length +
+      " · 숫자 컬럼 " + numericConfigs.length + "개 · 타입: " + typeSummary;
+    $("outName").value = currentFileBase + "_result.xlsx";
+    $("resultPanel").classList.add("hidden"); lastResult = null;
+    if (table.rows.length === 0)
+      setStatus("파일을 불러왔지만 분석할 데이터 행이 없습니다. (헤더만 있는 파일입니다)");
+    else
+      setStatus("파일을 불러왔습니다. [분석 시작] 버튼을 눌러 주세요.");
+  }
+  // 시트 변경 시 컬럼 목록을 다시 읽어 반영
+  $("sheetSelect").addEventListener("change", (e) => {
+    if (currentWorkbook) applyLoadedSheet(parseInt(e.target.value, 10) || 0);
+  });
 
   /** 여러 개가 들어오면 첫 번째만 분석하고, 표시는 "첫 파일명 (외 N개)" 형태로 한다. */
   function handleFiles(fileList) {
@@ -2540,11 +2664,31 @@ window.__infoTooltip = InfoTooltip;
     }
   }
 
-  /** 검증 + 읽기 — 단일 분석과 동일한 공통 검증 규칙(validateUploadFile)을 재사용한다. */
+  /** 검증 + 워크북 열기 — 단일 분석과 동일한 공통 검증 규칙(validateUploadFile)을 재사용한다. */
   async function loadForCompare(file) {
     await window.__upload.validateUploadFile(file);
-    const raw = await readFile(file);
-    return { columns: dedupe(raw.columns), rows: raw.rows };
+    return await loadWorkbook(file);
+  }
+
+  /** 슬롯의 시트 드롭다운을 채운다(2개 이상일 때만 노출). */
+  function populateSlotSheets(key, wb) {
+    const sel = $("sheet" + key);
+    sel.innerHTML = "";
+    wb.sheets.forEach((name, i) => { const op = document.createElement("option"); op.value = String(i); op.textContent = name; sel.appendChild(op); });
+    sel.value = "0";
+    $("sheetRow" + key).classList.toggle("hidden", !wb.multi);
+  }
+
+  /** 선택한 시트를 슬롯 테이블로 반영한다(업로드·시트 변경 공용). */
+  function applySlotSheet(key, index) {
+    const s = slots[key]; if (!s) return;
+    const raw = s.workbook.readSheet(index);
+    s.sheetIndex = index;
+    s.table = { columns: dedupe(raw.columns), rows: raw.rows };
+    renderSlot(key);
+    if (!raw.columns.length) setCmpError("파일 " + key + "의 선택한 시트에 데이터가 없습니다. 다른 시트를 선택해 주세요.");
+    $("cmpResultPanel").classList.add("hidden"); lastCompare = null;
+    afterSlotsChanged();
   }
 
   async function handleSlotFile(key, file) {
@@ -2555,19 +2699,21 @@ window.__infoTooltip = InfoTooltip;
     setCmpStatus("파일 " + key + "를 읽고 있습니다...");
     try {
       await new Promise((r) => setTimeout(r, 0));
-      const t = await loadForCompare(file);
-      slots[key] = { name: file.name, table: t };
-      renderSlot(key);
-      $("cmpResultPanel").classList.add("hidden"); lastCompare = null;
-      afterSlotsChanged();
+      const wb = await loadForCompare(file);
+      slots[key] = { name: file.name, workbook: wb, sheetIndex: 0, table: null };
+      populateSlotSheets(key, wb);   // 여러 시트면 드롭다운 노출
+      applySlotSheet(key, 0);        // 기본 첫 시트로 반영
     } catch (err) {
       console.error(err);
       setCmpError("파일 " + key + "를 읽지 못했습니다: " + (err && err.message ? err.message : err));
-      slots[key] = null; renderSlot(key); afterSlotsChanged();
+      slots[key] = null; renderSlot(key); $("sheetRow" + key).classList.add("hidden"); afterSlotsChanged();
     } finally {
       busy = false; $("dz" + key).classList.remove("busy");
     }
   }
+  // 시트 변경 시 해당 슬롯의 컬럼을 다시 읽고 기준 컬럼을 재추론한다.
+  $("sheetA").addEventListener("change", (e) => { if (slots.A) applySlotSheet("A", parseInt(e.target.value, 10) || 0); });
+  $("sheetB").addEventListener("change", (e) => { if (slots.B) applySlotSheet("B", parseInt(e.target.value, 10) || 0); });
 
   function setupSlot(key) {
     const dz = $("dz" + key), input = $("file" + key), clear = $("dz" + key + "Clear");
@@ -2590,7 +2736,7 @@ window.__infoTooltip = InfoTooltip;
     clear.addEventListener("click", (e) => {
       e.stopPropagation();
       if (busy) return;
-      slots[key] = null; renderSlot(key);
+      slots[key] = null; renderSlot(key); $("sheetRow" + key).classList.add("hidden");
       $("cmpResultPanel").classList.add("hidden"); lastCompare = null;
       setCmpError(""); afterSlotsChanged();
     });
@@ -2689,7 +2835,9 @@ window.__infoTooltip = InfoTooltip;
 
   /** 두 슬롯 상태가 바뀔 때: 키 후보 갱신 + 버튼 활성화. */
   function afterSlotsChanged() {
-    const ready = slots.A && slots.B;
+    // 두 슬롯 모두 로드되고 선택 시트에 컬럼이 있어야 비교 가능
+    const ready = !!(slots.A && slots.B && slots.A.table && slots.A.table.columns.length &&
+      slots.B.table && slots.B.table.columns.length);
     $("btnCompare").disabled = !ready;
     if (!ready) {
       $("keyA").innerHTML = ""; $("keyB").innerHTML = "";
