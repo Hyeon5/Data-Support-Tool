@@ -70,21 +70,16 @@
   .note{font-size:12px; color:var(--muted); margin-top:6px;}
   .runbar{position:sticky; bottom:0; background:var(--panel); border-top:1px solid var(--line);
     padding:14px 18px; border-radius:0 0 10px 10px;}
-  /* Info(ⓘ) 아이콘 + 툴팁 */
-  .info-icon{
-    display:inline-flex; align-items:center; justify-content:center;
-    width:16px; height:16px; margin-left:5px; padding:0; flex:0 0 auto;
-    border:0; border-radius:50%; background:#c7d2e0; color:#1f2933;
-    font-size:11px; font-style:italic; font-weight:700;
-    font-family:Georgia,"Times New Roman",serif; line-height:1;
-    cursor:help; vertical-align:middle;
+  /* 도움말 툴팁: 옵션명 텍스트 자체가 hover 대상 */
+  .has-tooltip{
+    border-bottom:1px dotted #97a9bf; cursor:help;
+    transition:color .12s, border-color .12s;
   }
-  .info-icon:hover{ background:var(--accent); color:#fff; }
-  .info-icon:focus-visible{ outline:none; background:var(--accent); color:#fff;
-    box-shadow:0 0 0 3px rgba(47,111,237,.35); }
-  .param label{ display:inline-flex; align-items:center; }
+  .has-tooltip:hover, .has-tooltip:focus-visible{
+    color:var(--accent); border-bottom-color:var(--accent); outline:none;
+  }
   .info-tooltip{
-    position:absolute; z-index:1000; max-width:320px;
+    position:absolute; z-index:1000; max-width:340px; max-height:72vh; overflow-y:auto;
     background:#1f2933; color:#e7edf3; border-radius:8px; padding:11px 13px;
     font-size:12.5px; line-height:1.55; box-shadow:0 8px 28px rgba(0,0,0,.28);
     opacity:0; visibility:hidden; pointer-events:none; transition:opacity .12s ease;
@@ -92,8 +87,69 @@
   .info-tooltip.visible{ opacity:1; visibility:visible; pointer-events:auto; }
   .info-tooltip .it-title{ font-weight:700; font-size:13px; color:#fff; margin-bottom:6px; }
   .info-tooltip .it-row{ display:flex; gap:8px; margin-top:4px; }
-  .info-tooltip .it-label{ flex:0 0 62px; color:#9fb3c8; font-size:11.5px; }
+  .info-tooltip .it-label{ flex:0 0 76px; color:#9fb3c8; font-size:11.5px; }
   .info-tooltip .it-text{ flex:1; }
+  /* Drag & Drop 업로드 영역 */
+  .dropzone{
+    margin-top:12px; border:2px dashed #b6c2d2; border-radius:10px;
+    padding:22px 16px; text-align:center; cursor:pointer; background:#fbfcfe;
+    transition:background .15s, border-color .15s;
+  }
+  .dropzone:hover{ border-color:var(--accent); }
+  .dropzone:focus-visible{ outline:none; border-color:var(--accent);
+    box-shadow:0 0 0 3px rgba(47,111,237,.25); }
+  .dropzone.dragover{ background:#eaf1ff; border-color:var(--accent); }
+  .dropzone.busy{ opacity:.75; cursor:progress; }
+  .dz-icon{ font-size:24px; color:var(--accent); line-height:1; }
+  .dz-text{ margin-top:6px; font-weight:600; }
+  .dz-sub{ margin-top:3px; }
+  .dz-loading{ margin-top:10px; display:inline-flex; align-items:center; gap:8px; color:var(--accent); font-weight:600; }
+  .spinner{ width:16px; height:16px; border:2px solid #cdd9ea; border-top-color:var(--accent);
+    border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .dz-error{ margin-top:8px; color:var(--warn); font-weight:600; font-size:13px; }
+  .dz-text.dz-file{ color:var(--accent); font-size:15px; word-break:break-all; }
+  .dz-clear{
+    margin-top:8px; background:#e4e9f2; color:#1f2933;
+    font-size:12px; padding:5px 12px; border-radius:14px;
+  }
+  .dz-clear:hover{ background:#f3d9d3; color:var(--warn); }
+  /* 분석 모드 탭 */
+  .mode-tabs{ display:flex; gap:8px; margin-bottom:16px; }
+  .mode-tab{
+    flex:1; background:#e4e9f2; color:#42505f; font-weight:600;
+    padding:11px 16px; border-radius:8px;
+  }
+  .mode-tab:hover{ background:#d3dbe8; }
+  .mode-tab.active{ background:var(--accent); color:#fff; }
+  /* 두 파일 비교 */
+  .cmp-slots{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:720px){ .cmp-slots{ grid-template-columns:1fr; } }
+  .dz-mini{ padding:16px 12px; margin-top:0; }
+  .dz-badge{
+    width:26px; height:26px; margin:0 auto 4px; border-radius:50%;
+    background:var(--accent); color:#fff; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+  }
+  select{ border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-size:13px; background:#fff; }
+  /* 비교 결과 행/셀 강조 */
+  #cmpTable td{ white-space:normal; }
+  tr.st-add td{ background:#E9F7EC; }
+  tr.st-del td{ background:#FDECEA; }
+  tr.st-chg td{ background:#FFFBEA; }
+  .st-badge{
+    display:inline-block; border-radius:4px; padding:1px 8px; font-size:12px; font-weight:700; color:#fff;
+  }
+  .st-badge.b-add{ background:#2e7d32; } .st-badge.b-del{ background:#c62828; }
+  .st-badge.b-chg{ background:#b98a00; } .st-badge.b-same{ background:#8a97a5; }
+  .chg{
+    display:inline-block; background:#FFF2CC; border:1px solid #f0dfa3;
+    border-radius:4px; padding:1px 7px; margin:2px 4px 2px 0; font-size:12px;
+  }
+  .chg.anom{ background:#FDE2DC; border-color:#e5a196; font-weight:600; }
+  .chg.miss{ background:#E8EAF0; border-color:#c9d0dc; }
+  .chg.type{ background:#EDE7F6; border-color:#cfc2e8; }
+  .tag-anom{ color:#b23c17; font-weight:700; font-size:12px; }
 </style>
 </head>
 <body>
@@ -104,14 +160,36 @@
 
 <div class="wrap">
 
+  <!-- 분석 모드 선택 탭 -->
+  <div class="mode-tabs" role="tablist" aria-label="분석 모드 선택">
+    <button type="button" id="tabSingle" class="mode-tab active" role="tab" aria-selected="true">단일 파일 분석</button>
+    <button type="button" id="tabCompare" class="mode-tab" role="tab" aria-selected="false">두 파일 비교 검증</button>
+  </div>
+
+  <div id="viewSingle">
+
   <!-- ① 파일 선택 -->
   <div class="panel">
-    <h2><span class="badge">1</span> 파일 선택 (xlsx / xls / csv)</h2>
+    <h2><span class="badge">1</span> 파일 선택 (csv / xlsx)</h2>
     <div class="row">
       <button id="btnPick">파일 선택</button>
-      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden">
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" class="hidden">
       <span id="fileName" class="filecue">선택된 파일이 없습니다.</span>
     </div>
+
+    <!-- Drag & Drop 업로드 영역 -->
+    <div id="dropZone" class="dropzone" tabindex="0" role="button"
+         aria-label="파일 업로드 영역. CSV 또는 XLSX 파일을 드래그하여 놓거나 클릭하여 업로드합니다.">
+      <div class="dz-icon" aria-hidden="true">⬆</div>
+      <div class="dz-text" id="dzText">CSV 또는 XLSX 파일을 여기에 드래그하거나 클릭하여 업로드</div>
+      <div class="dz-sub muted" id="dzSub">허용 형식: .csv, .xlsx (구형 .xls 도 지원) · 최대 50MB</div>
+      <button type="button" id="dzClear" class="dz-clear hidden" aria-label="선택한 파일 제거">✕ 파일 제거</button>
+      <div id="dzLoading" class="dz-loading hidden" role="status" aria-live="polite">
+        <span class="spinner" aria-hidden="true"></span><span>업로드 중...</span>
+      </div>
+    </div>
+    <div id="dzError" class="dz-error hidden" role="alert" aria-live="assertive"></div>
+
     <div id="fileInfo" class="note"></div>
   </div>
 
@@ -147,7 +225,7 @@
   <!-- 숫자 컬럼 설정 -->
   <div class="panel">
     <h2>숫자 컬럼 설정 (범위 검사)</h2>
-    <p class="muted">파일을 읽으면 숫자 컬럼이 자동 추출됩니다. 허용 최소/최대값을 수정하고 '사용'을 체크하세요.</p>
+    <p class="muted">파일을 읽으면 숫자 컬럼이 자동으로 추출됩니다. 허용 최소/최대값을 수정하시고 '사용'을 체크해 주세요.</p>
     <div class="tbl-scroll">
       <table id="numTable" class="num-config">
         <thead><tr>
@@ -155,7 +233,7 @@
           <th>허용 최소</th><th>허용 최대</th><th>사용</th>
         </tr></thead>
         <tbody id="numTableBody">
-          <tr><td colspan="6" class="muted">파일을 먼저 선택하세요.</td></tr>
+          <tr><td colspan="6" class="muted">파일을 먼저 선택해 주세요.</td></tr>
         </tbody>
       </table>
     </div>
@@ -166,7 +244,7 @@
     <h2><span class="badge">5</span> 결과 저장 (파일명)</h2>
     <div class="row">
       <input type="text" id="outName" value="anomaly_result.xlsx" style="min-width:320px;">
-      <span class="muted">분석 완료 후 아래 [결과 다운로드] 버튼으로 Excel 파일을 내려받습니다.</span>
+      <span class="muted">분석이 끝나면 [결과 다운로드] 버튼으로 Excel 파일을 받으실 수 있습니다.</span>
     </div>
   </div>
 
@@ -174,6 +252,7 @@
   <div class="panel hidden" id="resultPanel">
     <h2>분석 결과</h2>
     <div class="summary" id="summary"></div>
+    <div id="skipNote" class="dz-error hidden" role="alert"></div>
     <div class="row" style="margin-bottom:10px;">
       <button id="btnDownload">결과 다운로드 (Excel)</button>
       <label style="display:flex;align-items:center;gap:6px;" class="muted">
@@ -188,18 +267,557 @@
 
   <!-- ③④ 실행 / 진행률 -->
   <div class="panel runbar">
-    <div id="status">대기 중</div>
+    <div id="status">파일을 선택해 주시면 분석을 시작할 수 있습니다.</div>
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
     <div class="row" style="margin-top:12px; justify-content:center;">
       <button id="btnRun" style="min-width:200px; padding:12px 20px;">분석 시작</button>
     </div>
   </div>
 
+  </div><!-- /viewSingle -->
+
+  <!-- ===== 두 파일 비교 검증 ===== -->
+  <div id="viewCompare" class="hidden">
+
+    <!-- 비교 ① 파일 선택 -->
+    <div class="panel">
+      <h2><span class="badge">1</span> 비교할 파일 선택</h2>
+      <p class="muted">기준이 되는 파일 A(이전 자료)와 비교할 파일 B(이후 자료)를 각각 올려 주세요.
+        CSV와 XLSX를 섞어서 비교하셔도 됩니다.</p>
+      <div class="cmp-slots">
+        <div>
+          <div class="dropzone dz-mini" id="dzA" tabindex="0" role="button"
+               aria-label="파일 A 업로드 영역. CSV 또는 XLSX 파일을 드래그하거나 클릭하여 업로드합니다.">
+            <div class="dz-badge">A</div>
+            <div class="dz-text" id="dzAText">파일 A를 여기에 드래그하거나 클릭하여 업로드</div>
+            <div class="dz-sub muted" id="dzASub">기준(이전) 데이터 · CSV / XLSX</div>
+            <button type="button" id="dzAClear" class="dz-clear hidden" aria-label="파일 A 제거">✕ 제거</button>
+          </div>
+          <input type="file" id="fileA" accept=".csv,.xlsx,.xls" class="hidden">
+        </div>
+        <div>
+          <div class="dropzone dz-mini" id="dzB" tabindex="0" role="button"
+               aria-label="파일 B 업로드 영역. CSV 또는 XLSX 파일을 드래그하거나 클릭하여 업로드합니다.">
+            <div class="dz-badge">B</div>
+            <div class="dz-text" id="dzBText">파일 B를 여기에 드래그하거나 클릭하여 업로드</div>
+            <div class="dz-sub muted" id="dzBSub">비교(이후) 데이터 · CSV / XLSX</div>
+            <button type="button" id="dzBClear" class="dz-clear hidden" aria-label="파일 B 제거">✕ 제거</button>
+          </div>
+          <input type="file" id="fileB" accept=".csv,.xlsx,.xls" class="hidden">
+        </div>
+      </div>
+      <div id="cmpFileError" class="dz-error hidden" role="alert" aria-live="assertive"></div>
+    </div>
+
+    <!-- 비교 ② 기준 컬럼 -->
+    <div class="panel">
+      <h2><span class="badge">2</span> 기준 컬럼 선택 (행 매칭 기준)</h2>
+      <p class="muted">두 파일의 행을 짝지어 줄 기준 컬럼(예: 관리번호, 업체명)을 선택해 주세요.
+        두 파일을 모두 올리시면 가장 알맞은 컬럼을 자동으로 추천해 드립니다.</p>
+      <div class="row">
+        <label class="muted">파일 A&nbsp;<select id="keyA" disabled aria-label="파일 A 기준 컬럼"></select></label>
+        <span aria-hidden="true" style="font-weight:700;">↔</span>
+        <label class="muted">파일 B&nbsp;<select id="keyB" disabled aria-label="파일 B 기준 컬럼"></select></label>
+      </div>
+      <div id="keyHint" class="note"></div>
+    </div>
+
+    <!-- 비교 ③ 이상 변동 기준 -->
+    <div class="panel">
+      <h2><span class="badge">3</span> 이상 변동 판정 기준</h2>
+      <div class="grid-opts">
+        <label><input type="checkbox" id="opt_cmp_rate" checked> 변화율 기준</label>
+        <label><input type="checkbox" id="opt_cmp_z" checked> Z-Score 기반 변화량</label>
+        <label><input type="checkbox" id="opt_cmp_iqr" checked> IQR 기반 변화량</label>
+      </div>
+      <div class="params" style="margin-top:12px;">
+        <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1"></div>
+        <div class="param"><label>변화량 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1"></div>
+      </div>
+    </div>
+
+    <!-- 비교 결과 -->
+    <div class="panel hidden" id="cmpResultPanel">
+      <h2>비교 결과</h2>
+      <div class="summary" id="cmpSummary"></div>
+      <div id="cmpNotes" class="note" style="margin-bottom:8px;"></div>
+      <div class="row" style="margin-bottom:10px;">
+        <label class="muted">표시 필터&nbsp;
+          <select id="cmpFilter" aria-label="비교 결과 표시 필터">
+            <option value="diff" selected>동일 행 제외</option>
+            <option value="all">전체 보기</option>
+            <option value="변경">변경만</option>
+            <option value="추가">추가만</option>
+            <option value="삭제">삭제만</option>
+            <option value="anomaly">이상 변동만</option>
+          </select>
+        </label>
+      </div>
+      <div class="row" style="margin-bottom:10px;">
+        <button id="btnCmpDownload">비교 결과 다운로드 (Excel)</button>
+      </div>
+      <div class="tbl-scroll">
+        <table id="cmpTable"><thead></thead><tbody></tbody></table>
+      </div>
+      <div class="note" id="cmpNote"></div>
+    </div>
+
+    <!-- 비교 실행 -->
+    <div class="panel runbar">
+      <div id="cmpStatus">파일 A와 B를 모두 올려 주시면 비교를 시작할 수 있습니다.</div>
+      <div class="progress-outer"><div class="progress-inner" id="cmpProgress"></div></div>
+      <div class="row" style="margin-top:12px; justify-content:center;">
+        <button id="btnCompare" style="min-width:200px; padding:12px 20px;" disabled>비교 시작</button>
+      </div>
+    </div>
+
+  </div><!-- /viewCompare -->
+
   <p class="muted" style="text-align:center;">
     ※ 모든 처리는 브라우저 내부에서 수행되며 외부로 데이터가 전송되지 않습니다.
   </p>
 </div>
 
+<script id="engineScript">
+"use strict";
+/* =====================================================================
+ * 분석 엔진 (순수 계산 코드)
+ *
+ * 이 스크립트 블록은 DOM 을 사용하지 않으며, 메인 화면과 Web Worker
+ * 양쪽에서 동일하게 실행된다. 분석(runAnalysis)은 워커에서 수행되어
+ * 대용량 데이터에서도 화면이 멈추지 않는다. Worker 생성이 불가능한
+ * 환경에서는 메인 스레드에서 그대로 실행된다(폴백).
+ * ===================================================================== */
+/* =====================================================================
+ * 2. 값 헬퍼 (결측 판별, 숫자/날짜 변환, 포맷)
+ * ===================================================================== */
+const Values = (function () {
+  const DATE_FORMATS_RE = [
+    /^\d{4}-\d{1,2}-\d{1,2}$/, /^\d{4}\/\d{1,2}\/\d{1,2}$/, /^\d{4}\.\d{1,2}\.\d{1,2}$/,
+    /^\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(:\d{2})?$/
+  ];
+  function isMissing(v) {
+    if (v === null || v === undefined) return true;
+    if (typeof v === "number" && Number.isNaN(v)) return true;
+    if (typeof v === "string" && v.trim() === "") return true;
+    return false;
+  }
+  function toNumber(v) {
+    if (typeof v === "boolean") return null;
+    if (typeof v === "number") return Number.isNaN(v) ? null : v;
+    if (v instanceof Date) return null;
+    if (typeof v === "string") {
+      const t = v.trim().replace(/,/g, "");
+      if (t === "") return null;
+      // 순수 숫자 형태만 허용 (지수 포함)
+      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return null;
+      const n = Number(t);
+      return Number.isNaN(n) ? null : n;
+    }
+    return null;
+  }
+  function toDate(v) {
+    if (v instanceof Date) return v;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (t === "") return null;
+      if (!DATE_FORMATS_RE.some(re => re.test(t))) return null;
+      const d = new Date(t.replace(/\./g, "-").replace(/\//g, "-"));
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+  function fmtDate(d) {
+    const p = (n) => String(n).padStart(2, "0");
+    const base = d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+    if (d.getUTCHours() || d.getUTCMinutes() || d.getUTCSeconds())
+      return base + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
+    return base;
+  }
+  function cellText(v) {
+    if (isMissing(v)) return "";
+    if (v instanceof Date) return fmtDate(v);
+    return String(v);
+  }
+  /** 사유 문자열용 숫자 포맷: 정수는 소수점 제거, 소수는 뒤쪽 0 제거. */
+  function fmtNum(x) {
+    const n = Number(x);
+    if (!isFinite(n)) return String(x);
+    if (Number.isInteger(n)) return String(n);
+    return n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+  }
+  return { isMissing, toNumber, toDate, cellText, fmtNum };
+})();
+
+/* =====================================================================
+ * 4. 컬럼 타입 자동 분석
+ * ===================================================================== */
+const ColumnAnalyzer = (function () {
+  const RATIO = 0.8;
+  function detectType(values) {
+    const nonMissing = values.filter(v => !Values.isMissing(v));
+    if (!nonMissing.length) return "String";
+    let num = 0, date = 0;
+    for (const v of nonMissing) {
+      if (typeof v === "number") num++;
+      else if (v instanceof Date) date++;
+      else if (Values.toNumber(v) !== null) num++;
+      else if (Values.toDate(v) !== null) date++;
+    }
+    const total = nonMissing.length;
+    if (num / total >= RATIO) return "Number";
+    if (date / total >= RATIO) return "Date";
+    return "String";
+  }
+  function analyze(table) {
+    return table.columns.map((name, idx) => ({
+      name, type: detectType(table.rows.map(r => r[idx]))
+    }));
+  }
+  function numericColumns(infos) { return infos.filter(i => i.type === "Number").map(i => i.name); }
+  function buildNumericConfigs(table, infos) {
+    const configs = [];
+    for (const info of infos) {
+      if (info.type !== "Number") continue;
+      const idx = table.columns.indexOf(info.name);
+      const nums = table.rows.map(r => Values.toNumber(r[idx])).filter(n => n !== null);
+      const min = nums.length ? Math.min(...nums) : 0;
+      const max = nums.length ? Math.max(...nums) : 0;
+      configs.push({ name: info.name, actualMin: min, actualMax: max, allowMin: min, allowMax: max, use: true });
+    }
+    return configs;
+  }
+  return { analyze, numericColumns, buildNumericConfigs };
+})();
+
+/* =====================================================================
+ * 5. 이상치 탐지 알고리즘 (공통 인터페이스: detect(ctx) -> [{row, reason}])
+ *    ctx = { table, numericColumns, numericFrame(col->number[]|null), config }
+ * ===================================================================== */
+const Detectors = (function () {
+  const F = Values.fmtNum;
+
+  // ① 결측치
+  function missing(ctx) {
+    const out = [];
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      const cols = [];
+      ctx.table.columns.forEach((c, i) => { if (Values.isMissing(ctx.table.rows[r][i])) cols.push(c); });
+      if (cols.length) out.push({ row: r, reason: "결측치 [" + cols.join(", ") + "]" });
+    }
+    return out;
+  }
+
+  // ② 중복 데이터 (모든 컬럼 값이 동일한 행)
+  function duplicate(ctx) {
+    const seen = new Map(); const groups = new Map();
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      // 구분자: 데이터에 나타날 수 없는 제어문자(U+0001). 반드시 이스케이프 표기로 유지할 것.
+      const key = ctx.table.rows[r].map(Values.cellText).join("\u0001");
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    }
+    const out = [];
+    for (const rowsIdx of groups.values())
+      if (rowsIdx.length > 1) rowsIdx.forEach(r => out.push({ row: r, reason: "중복 데이터" }));
+    return out;
+  }
+
+  // ③ 범위 검사
+  function range(ctx) {
+    const out = [];
+    for (const cfg of ctx.config.numericConfigs) {
+      if (!cfg.use) continue;
+      const col = ctx.numericFrame[cfg.name]; if (!col) continue;
+      for (let r = 0; r < col.length; r++) {
+        const v = col[r]; if (v === null) continue;
+        if (v < cfg.allowMin || v > cfg.allowMax)
+          out.push({ row: r, reason: "범위 초과 [" + cfg.name + "] (허용:" + F(cfg.allowMin) + "~" + F(cfg.allowMax) + ", 실제:" + F(v) + ")" });
+      }
+    }
+    return out;
+  }
+
+  // ④ 증감률 검사 (이전 행 대비)
+  function changeRate(ctx) {
+    const out = []; const th = ctx.config.changeRateThreshold;
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name]; let prev = null;
+      for (let r = 0; r < col.length; r++) {
+        const cur = col[r];
+        if (cur === null) { prev = null; continue; }
+        if (prev !== null && prev !== 0) {
+          const ch = (cur - prev) / Math.abs(prev) * 100;
+          if (Math.abs(ch) > th) out.push({ row: r, reason: "증감률 이상 [" + name + "] (" + (ch >= 0 ? "+" : "-") + F(Math.abs(ch)) + "%)" });
+        }
+        prev = cur;
+      }
+    }
+    return out;
+  }
+
+  // ⑤ IQR
+  function iqr(ctx) {
+    const out = [];
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name];
+      const vals = col.filter(v => v !== null).sort((a, b) => a - b);
+      if (vals.length < 4) continue;
+      const q = (p) => { const pos = (vals.length - 1) * p; const lo = Math.floor(pos), hi = Math.ceil(pos); return vals[lo] + (vals[hi] - vals[lo]) * (pos - lo); };
+      const q1 = q(0.25), q3 = q(0.75), iqrv = q3 - q1;
+      if (iqrv === 0) continue;
+      const lower = q1 - 1.5 * iqrv, upper = q3 + 1.5 * iqrv;
+      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; if (v < lower || v > upper) out.push({ row: r, reason: "IQR 이상 [" + name + "]" }); }
+    }
+    return out;
+  }
+
+  // ⑥ Z-Score
+  function zscore(ctx) {
+    const out = []; const th = ctx.config.zscoreThreshold;
+    for (const name of ctx.numericColumns) {
+      const col = ctx.numericFrame[name];
+      const vals = col.filter(v => v !== null);
+      if (vals.length < 2) continue;
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length);
+      if (std === 0) continue;
+      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; const z = (v - mean) / std; if (Math.abs(z) > th) out.push({ row: r, reason: "Z-Score 이상 [" + name + "] (Z=" + F(Math.round(Math.abs(z) * 100) / 100) + ")" }); }
+    }
+    return out;
+  }
+
+  // --- 머신러닝 공통: 특징 행렬(표준화 옵션) ---
+  function featureMatrix(ctx, standardize) {
+    const cols = ctx.numericColumns;
+    if (!cols.length) return { X: [], pos: [] };
+    const X = [], pos = [];
+    for (let r = 0; r < ctx.table.rows.length; r++) {
+      const row = []; let ok = true;
+      for (const c of cols) { const v = ctx.numericFrame[c][r]; if (v === null) { ok = false; break; } row.push(v); }
+      if (ok) { X.push(row); pos.push(r); }
+    }
+    if (standardize && X.length) {
+      for (let j = 0; j < cols.length; j++) {
+        let m = 0; for (const row of X) m += row[j]; m /= X.length;
+        let s = 0; for (const row of X) s += (row[j] - m) * (row[j] - m); s = Math.sqrt(s / X.length) || 1;
+        for (const row of X) row[j] = (row[j] - m) / s;
+      }
+    }
+    return { X, pos };
+  }
+  function dist(a, b) { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
+
+  // 재현성 있는 난수 (mulberry32)
+  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // ⑦ Isolation Forest
+  function isolationForest(ctx) {
+    const { X, pos } = featureMatrix(ctx, false);
+    const n = X.length, dim = X.length ? X[0].length : 0;
+    if (n < 2 || dim === 0) return [];
+    const rand = rng(42);
+    const nTrees = 100, psi = Math.min(256, n);
+    const heightLimit = Math.ceil(Math.log2(psi));
+    const c = (m) => m > 2 ? 2 * (Math.log(m - 1) + 0.5772156649) - 2 * (m - 1) / m : (m === 2 ? 1 : 0);
+
+    function buildTree(idxs, depth) {
+      if (depth >= heightLimit || idxs.length <= 1) return { size: idxs.length, ext: true };
+      const q = Math.floor(rand() * dim);
+      let mn = Infinity, mx = -Infinity;
+      for (const i of idxs) { const v = X[i][q]; if (v < mn) mn = v; if (v > mx) mx = v; }
+      if (mn === mx) return { size: idxs.length, ext: true };
+      const p = mn + rand() * (mx - mn);
+      const left = [], right = [];
+      for (const i of idxs) (X[i][q] < p ? left : right).push(i);
+      return { ext: false, q, p, left: buildTree(left, depth + 1), right: buildTree(right, depth + 1) };
+    }
+    function pathLen(x, node, depth) {
+      if (node.ext) return depth + c(node.size);
+      return x[node.q] < node.p ? pathLen(x, node.left, depth + 1) : pathLen(x, node.right, depth + 1);
+    }
+    const trees = [];
+    for (let t = 0; t < nTrees; t++) {
+      const sample = [];
+      for (let k = 0; k < psi; k++) sample.push(Math.floor(rand() * n));
+      trees.push(buildTree(sample, 0));
+    }
+    const cPsi = c(psi) || 1;
+    const scores = X.map(x => { let sum = 0; for (const tr of trees) sum += pathLen(x, tr, 0); return Math.pow(2, -(sum / nTrees) / cPsi); });
+    const k = Math.max(1, Math.round(ctx.config.isoContamination * n));
+    const threshold = scores.slice().sort((a, b) => b - a)[Math.min(k, n) - 1];
+    const out = [];
+    for (let i = 0; i < n; i++) if (scores[i] >= threshold) out.push({ row: pos[i], reason: "Isolation Forest 이상" });
+    return out;
+  }
+
+  // 거리 기반 알고리즘의 행 수 상한: O(n²) 계산이 브라우저를 멈추게 하지 않도록 한다.
+  function checkRowLimit(ctx, n, algoName) {
+    const limit = ctx.config.mlRowLimit || 20000;
+    if (n > limit)
+      throw new Error("데이터가 " + limit.toLocaleString() + "행을 넘어 " + algoName +
+        " 검사를 건너뛰었습니다(현재 " + n.toLocaleString() + "행). 데이터를 나누어 다시 시도해 주세요.");
+  }
+
+  // ⑧ LOF — 전체 거리 행렬을 만들지 않고 k-최근접 이웃만 유지한다(메모리 O(n·k)).
+  function lof(ctx) {
+    const { X, pos } = featureMatrix(ctx, true);
+    const n = X.length; if (n < 2) return [];
+    checkRowLimit(ctx, n, "LOF");
+    const k = Math.min(ctx.config.lofNeighbors, n - 1); if (k < 1) return [];
+    const neigh = new Array(n), neighDist = new Array(n), kdist = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      // 크기 k 의 정렬 배열에 삽입하며 k-최근접만 유지
+      const idxs = new Int32Array(k).fill(-1);
+      const ds = new Float64Array(k).fill(Infinity);
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        const d = dist(X[i], X[j]);
+        if (d < ds[k - 1]) {
+          let p = k - 1;
+          while (p > 0 && ds[p - 1] > d) { ds[p] = ds[p - 1]; idxs[p] = idxs[p - 1]; p--; }
+          ds[p] = d; idxs[p] = j;
+        }
+      }
+      neigh[i] = idxs; neighDist[i] = ds; kdist[i] = ds[k - 1];
+    }
+    const lrd = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (let m = 0; m < k; m++) sum += Math.max(kdist[neigh[i][m]], neighDist[i][m]);
+      lrd[i] = sum === 0 ? Infinity : k / sum;
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (let m = 0; m < k; m++) sum += lrd[neigh[i][m]];
+      const lofv = (lrd[i] === Infinity) ? 1 : (sum / k) / lrd[i];
+      if (lofv > 1.5) out.push({ row: pos[i], reason: "LOF 이상" });
+    }
+    return out;
+  }
+
+  // ⑨ DBSCAN
+  function dbscan(ctx) {
+    const { X, pos } = featureMatrix(ctx, true);
+    const n = X.length; if (n < 1) return [];
+    checkRowLimit(ctx, n, "DBSCAN");
+    const eps = ctx.config.dbscanEps, minPts = ctx.config.dbscanMinSamples;
+    const neighbors = (i) => { const res = []; for (let j = 0; j < n; j++) if (dist(X[i], X[j]) <= eps) res.push(j); return res; };
+    const labels = new Int32Array(n).fill(-2); // -2 미방문, -1 노이즈, >=0 군집
+    let cid = 0;
+    for (let i = 0; i < n; i++) {
+      if (labels[i] !== -2) continue;
+      const nb = neighbors(i);
+      if (nb.length < minPts) { labels[i] = -1; continue; }
+      labels[i] = cid;
+      const queue = nb.slice();
+      for (let qi = 0; qi < queue.length; qi++) {
+        const j = queue[qi];
+        if (labels[j] === -1) labels[j] = cid;
+        if (labels[j] !== -2) continue;
+        labels[j] = cid;
+        const nb2 = neighbors(j);
+        if (nb2.length >= minPts) for (const x of nb2) queue.push(x);
+      }
+      cid++;
+    }
+    const out = [];
+    for (let i = 0; i < n; i++) if (labels[i] === -1) out.push({ row: pos[i], reason: "DBSCAN 이상" });
+    return out;
+  }
+
+  // 활성화된 detector 목록 (순서 = 사유 나열 순서)
+  function active(config) {
+    const reg = [
+      [config.missing, "결측치", missing], [config.duplicate, "중복 데이터", duplicate],
+      [config.range, "범위 초과", range], [config.change, "증감률 이상", changeRate],
+      [config.iqr, "IQR", iqr], [config.zscore, "Z-Score", zscore],
+      [config.iforest, "Isolation Forest", isolationForest],
+      [config.lof, "LOF", lof], [config.dbscan, "DBSCAN", dbscan],
+    ];
+    return reg.filter(x => x[0]).map(x => ({ name: x[1], fn: x[2] }));
+  }
+  return { active };
+})();
+
+/* =====================================================================
+ * 6. 분석 오케스트레이션 (진행률 콜백 + UI 양보를 위한 비동기)
+ * ===================================================================== */
+async function runAnalysis(table, config, onProgress) {
+  const sleep = () => new Promise(r => setTimeout(r, 0));
+  onProgress(2, "컬럼 타입 분석 중...");
+  const infos = ColumnAnalyzer.analyze(table);
+  const numericColumns = ColumnAnalyzer.numericColumns(infos);
+  const numericFrame = {};
+  for (const name of numericColumns) {
+    const idx = table.columns.indexOf(name);
+    numericFrame[name] = table.rows.map(r => Values.toNumber(r[idx]));
+  }
+  const ctx = { table, numericColumns, numericFrame, config };
+
+  const reasonsByRow = new Map();
+  const addReason = (row, reason) => {
+    if (!reasonsByRow.has(row)) reasonsByRow.set(row, []);
+    reasonsByRow.get(row).push(reason);
+  };
+
+  // 숫자 컬럼 형식 오류(항상 수행): 값이 있는데 숫자가 아닌 셀은
+  // 결측/숫자 검사 어디에도 걸리지 않는 사각지대이므로 별도로 표시한다.
+  for (const name of numericColumns) {
+    const idx = table.columns.indexOf(name);
+    for (let r = 0; r < table.rows.length; r++) {
+      const raw = table.rows[r][idx];
+      if (!Values.isMissing(raw) && Values.toNumber(raw) === null) {
+        let text = Values.cellText(raw);
+        if (text.length > 20) text = text.slice(0, 20) + "…";
+        addReason(r, "형식 오류 [" + name + "] (값:" + text + ")");
+      }
+    }
+  }
+
+  const detectors = Detectors.active(config);
+  const skipped = [];
+  for (let i = 0; i < detectors.length; i++) {
+    onProgress(Math.round((i / detectors.length) * 90) + 5, detectors[i].name + " 분석 중...");
+    await sleep();
+    try {
+      const findings = detectors[i].fn(ctx);
+      for (const f of findings) addReason(f.row, f.reason);
+    } catch (e) {
+      // 한 알고리즘의 실패가 전체 분석을 막지 않도록 기록만 하고 계속 진행한다.
+      skipped.push({ name: detectors[i].name, message: String((e && e.message) || e) });
+    }
+  }
+  onProgress(96, "결과 집계 중...");
+  await sleep();
+  const flags = [], reasons = [];
+  for (let r = 0; r < table.rows.length; r++) {
+    const rr = reasonsByRow.get(r);
+    if (rr) { flags.push("이상"); reasons.push(rr.join(", ")); }
+    else { flags.push(""); reasons.push(""); }
+  }
+  onProgress(100, "분석이 완료되었습니다.");
+  return { table, infos, flags, reasons, skipped, anomalyCount: flags.filter(f => f).length };
+}
+
+/* ---- Web Worker 진입점: 워커 컨텍스트에서만 등록된다 ---- */
+if (typeof importScripts === "function") {
+  self.onmessage = async (e) => {
+    const { columns, rows, config } = e.data;
+    try {
+      const result = await runAnalysis({ columns, rows }, config,
+        (pct, msg) => self.postMessage({ type: "progress", pct, msg }));
+      self.postMessage({
+        type: "done", flags: result.flags, reasons: result.reasons,
+        skipped: result.skipped, anomalyCount: result.anomalyCount,
+      });
+    } catch (err) {
+      self.postMessage({ type: "error", message: String((err && err.message) || err) });
+    }
+  };
+}
+</script>
 <script>
 "use strict";
 /* =====================================================================
@@ -364,7 +982,7 @@ const Zip = (function () {
     for (let i = bytes.length - 22; i >= 0; i--) {
       if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
     }
-    if (eocd < 0) throw new Error("ZIP: EOCD 를 찾을 수 없습니다.");
+    if (eocd < 0) throw new Error("파일의 압축 구조를 읽을 수 없습니다. 파일이 손상되었을 수 있습니다.");
     const count = dv.getUint16(eocd + 10, true);
     let p = dv.getUint32(eocd + 16, true);
     const files = {};
@@ -382,6 +1000,9 @@ const Zip = (function () {
       const lhExtraLen = dv.getUint16(localOff + 28, true);
       const dataStart = localOff + 30 + lhNameLen + lhExtraLen;
       const comp = bytes.subarray(dataStart, dataStart + compSize);
+      // zip-bomb 방어: 선언된 원본 크기가 비정상적으로 크면 거부(압축 해제 시 메모리 폭증 방지)
+      if (uncompSize > 300 * 1024 * 1024)
+        throw new Error("압축 해제 크기가 너무 큽니다(손상되었거나 비정상 파일).");
       let data;
       if (method === 0) data = comp.slice();
       else if (method === 8) data = Inflate.inflateRaw(comp, uncompSize);
@@ -442,73 +1063,15 @@ const Zip = (function () {
 })();
 
 /* =====================================================================
- * 2. 값 헬퍼 (결측 판별, 숫자/날짜 변환, 포맷)
- * ===================================================================== */
-const Values = (function () {
-  const DATE_FORMATS_RE = [
-    /^\d{4}-\d{1,2}-\d{1,2}$/, /^\d{4}\/\d{1,2}\/\d{1,2}$/, /^\d{4}\.\d{1,2}\.\d{1,2}$/,
-    /^\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(:\d{2})?$/
-  ];
-  function isMissing(v) {
-    if (v === null || v === undefined) return true;
-    if (typeof v === "number" && Number.isNaN(v)) return true;
-    if (typeof v === "string" && v.trim() === "") return true;
-    return false;
-  }
-  function toNumber(v) {
-    if (typeof v === "boolean") return null;
-    if (typeof v === "number") return Number.isNaN(v) ? null : v;
-    if (v instanceof Date) return null;
-    if (typeof v === "string") {
-      const t = v.trim().replace(/,/g, "");
-      if (t === "") return null;
-      // 순수 숫자 형태만 허용 (지수 포함)
-      if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return null;
-      const n = Number(t);
-      return Number.isNaN(n) ? null : n;
-    }
-    return null;
-  }
-  function toDate(v) {
-    if (v instanceof Date) return v;
-    if (typeof v === "string") {
-      const t = v.trim();
-      if (t === "") return null;
-      if (!DATE_FORMATS_RE.some(re => re.test(t))) return null;
-      const d = new Date(t.replace(/\./g, "-").replace(/\//g, "-"));
-      return isNaN(d.getTime()) ? null : d;
-    }
-    return null;
-  }
-  function fmtDate(d) {
-    const p = (n) => String(n).padStart(2, "0");
-    const base = d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
-    if (d.getUTCHours() || d.getUTCMinutes() || d.getUTCSeconds())
-      return base + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes()) + ":" + p(d.getUTCSeconds());
-    return base;
-  }
-  function cellText(v) {
-    if (isMissing(v)) return "";
-    if (v instanceof Date) return fmtDate(v);
-    return String(v);
-  }
-  /** 사유 문자열용 숫자 포맷: 정수는 소수점 제거, 소수는 뒤쪽 0 제거. */
-  function fmtNum(x) {
-    const n = Number(x);
-    if (!isFinite(n)) return String(x);
-    if (Number.isInteger(n)) return String(n);
-    return n.toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
-  }
-  return { isMissing, toNumber, toDate, cellText, fmtNum };
-})();
-
-/* =====================================================================
  * 3. 파일 리더 (xlsx / xls / csv) — Table {columns, rows} 반환
  * ===================================================================== */
 
-// Excel 시리얼 날짜 -> JS Date (UTC 기준, 1899-12-30 epoch)
-function excelSerialToDate(serial) {
-  const ms = Math.round((serial - 25569) * 86400 * 1000);
+// Excel 시리얼 날짜 -> JS Date (UTC 기준). 기본 1900 체계(1899-12-30 epoch),
+// is1904 가 참이면 1904 체계(1904-01-01 epoch)로 해석한다.
+function excelSerialToDate(serial, is1904) {
+  const ms = is1904
+    ? Math.round(serial * 86400 * 1000) + Date.UTC(1904, 0, 1)
+    : Math.round((serial - 25569) * 86400 * 1000);
   return new Date(ms);
 }
 // 열 문자(A, B, ... AA)를 0-based 인덱스로
@@ -706,7 +1269,99 @@ const XlsReader = (function () {
     return { readString, atEnd };
   }
 
+  /** OLE2(CFB) 컨테이너에서 "Workbook"/"Book" 스트림을 추출한다.
+   *  실제 Excel 이 저장하는 .xls 는 BIFF 스트림이 이 컨테이너 안에 들어 있다. */
+  function cfbExtract(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const FREE = 0xFFFFFFFF, END = 0xFFFFFFFE;
+    const sectorSize = 1 << dv.getUint16(30, true);
+    const miniSectorSize = 1 << dv.getUint16(32, true);
+    const dirStart = dv.getUint32(48, true);
+    const miniCutoff = dv.getUint32(56, true);
+    const miniFatStart = dv.getUint32(60, true);
+    const difatStart = dv.getUint32(68, true);
+    const numDifat = dv.getUint32(72, true);
+    const sectorOff = (s) => 512 + s * sectorSize;
+    // FAT 섹터 목록: 헤더의 DIFAT 109개 + 연결된 DIFAT 섹터
+    const fatSectors = [];
+    for (let i = 0; i < 109; i++) {
+      const v = dv.getUint32(76 + i * 4, true);
+      if (v !== FREE && v !== END) fatSectors.push(v);
+    }
+    let ds = difatStart;
+    for (let n = 0; n < numDifat && ds !== FREE && ds !== END; n++) {
+      const base = sectorOff(ds), per = sectorSize / 4 - 1;
+      for (let i = 0; i < per; i++) {
+        const v = dv.getUint32(base + i * 4, true);
+        if (v !== FREE && v !== END) fatSectors.push(v);
+      }
+      ds = dv.getUint32(base + per * 4, true);
+    }
+    const perFat = sectorSize / 4;
+    const fat = new Uint32Array(fatSectors.length * perFat);
+    fatSectors.forEach((fs, idx) => {
+      const base = sectorOff(fs);
+      for (let i = 0; i < perFat; i++) fat[idx * perFat + i] = dv.getUint32(base + i * 4, true);
+    });
+    const chainSectors = (start) => {
+      const list = []; let s = start;
+      while (s !== FREE && s !== END && list.length < 1 << 20) { list.push(s); s = fat[s]; }
+      return list;
+    };
+    const readChain = (start, size) => {
+      const out = new Uint8Array(size); let pos = 0;
+      for (const s of chainSectors(start)) {
+        if (pos >= size) break;
+        const off = sectorOff(s), n = Math.min(sectorSize, size - pos);
+        out.set(bytes.subarray(off, off + n), pos); pos += n;
+      }
+      return out;
+    };
+    // 디렉터리에서 Workbook/Book 스트림과 루트(미니 스트림 컨테이너)를 찾는다.
+    const dirSecs = chainSectors(dirStart);
+    const dirData = new Uint8Array(dirSecs.length * sectorSize);
+    dirSecs.forEach((sec, i) => dirData.set(bytes.subarray(sectorOff(sec), sectorOff(sec) + sectorSize), i * sectorSize));
+    const ddv = new DataView(dirData.buffer);
+    let workbook = null, root = null;
+    for (let e = 0; (e + 1) * 128 <= dirData.length; e++) {
+      const off = e * 128;
+      const nameLen = ddv.getUint16(off + 64, true);
+      if (!nameLen) continue;
+      let name = "";
+      for (let i = 0; i < nameLen / 2 - 1; i++) name += String.fromCharCode(ddv.getUint16(off + i * 2, true));
+      const type = ddv.getUint8(off + 66);
+      const entry = { start: ddv.getUint32(off + 116, true), size: ddv.getUint32(off + 120, true) };
+      if (type === 5) root = entry;
+      if (type === 2 && (name === "Workbook" || name === "Book")) workbook = entry;
+    }
+    if (!workbook) return null;
+    if (workbook.size >= miniCutoff) return readChain(workbook.start, workbook.size);
+    // 작은 스트림은 루트의 미니 스트림 안에 미니 FAT 체인으로 저장된다.
+    if (!root) return null;
+    const mini = readChain(root.start, root.size);
+    const miniFatSecs = chainSectors(miniFatStart);
+    const miniFat = new Uint32Array(miniFatSecs.length * perFat);
+    miniFatSecs.forEach((fs, idx) => {
+      const base = sectorOff(fs);
+      for (let i = 0; i < perFat; i++) miniFat[idx * perFat + i] = dv.getUint32(base + i * 4, true);
+    });
+    const out = new Uint8Array(workbook.size);
+    let pos = 0, s = workbook.start;
+    while (s !== FREE && s !== END && pos < workbook.size) {
+      const n = Math.min(miniSectorSize, workbook.size - pos);
+      out.set(mini.subarray(s * miniSectorSize, s * miniSectorSize + n), pos);
+      pos += n; s = miniFat[s];
+    }
+    return out;
+  }
+
   function read(bytes) {
+    // OLE2 컨테이너(실제 .xls)면 내부의 Workbook 스트림을 꺼내 BIFF 로 해석한다.
+    if (bytes.length > 512 && bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0) {
+      const stream = cfbExtract(bytes);
+      if (!stream) throw new Error("xls 파일에서 Workbook 스트림을 찾지 못했습니다. 파일이 손상되었을 수 있습니다.");
+      bytes = stream;
+    }
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let p = 0;
     // 레코드 순회
@@ -718,6 +1373,37 @@ const XlsReader = (function () {
       p += 4 + len;
       if (type === 0x000A && p >= bytes.length) break; // EOF
     }
+    // 셀 서식 수집: XF(0x00E0) 의 ifmt, FORMAT(0x041E) 의 사용자 서식, DATEMODE(0x0022)
+    // 를 해석하여 "날짜 서식이 적용된 XF 인덱스" 를 판별한다.
+    const xfFmt = [];            // XF 등장 순서 -> ifmt
+    const fmtCode = new Map();   // ifmt -> 서식 문자열
+    let is1904 = false;
+    const BUILTIN_DATE = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
+    function readUnicodeAt(off) {
+      const cch = dv.getUint16(off, true); const grbit = dv.getUint8(off + 2);
+      let str = "", p2 = off + 3;
+      for (let k = 0; k < cch; k++) {
+        if (grbit & 1) { str += String.fromCharCode(dv.getUint16(p2, true)); p2 += 2; }
+        else { str += String.fromCharCode(dv.getUint8(p2)); p2 += 1; }
+      }
+      return str;
+    }
+    for (const rec of records) {
+      if (rec.type === 0x00E0) xfFmt.push(dv.getUint16(rec.start + 2, true));
+      else if (rec.type === 0x041E) {
+        const ifmt = dv.getUint16(rec.start, true);
+        try { fmtCode.set(ifmt, readUnicodeAt(rec.start + 2)); } catch (e) { /* 서식 없음 */ }
+      } else if (rec.type === 0x0022) is1904 = dv.getUint16(rec.start, true) === 1;
+    }
+    function isDateXf(ixfe) {
+      const ifmt = xfFmt[ixfe];
+      if (ifmt === undefined) return false;
+      if (BUILTIN_DATE.has(ifmt)) return true;
+      const code = (fmtCode.get(ifmt) || "").toLowerCase();
+      return /[dy]/.test(code) && /(yy|mm|dd|d|y|hh|ss)/.test(code) && !/[#]/.test(code);
+    }
+    const asValue = (num, ixfe) => (isDateXf(ixfe) ? excelSerialToDate(num, is1904) : num);
+
     // SST 수집 (뒤따르는 CONTINUE 0x003C 포함)
     let sst = [];
     for (let i = 0; i < records.length; i++) {
@@ -756,17 +1442,23 @@ const XlsReader = (function () {
         }
         case 0x0203: { // NUMBER
           const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
-          put(row, col, dv.getFloat64(s + 6, true)); break;
+          const ixfe = dv.getUint16(s + 4, true);
+          put(row, col, asValue(dv.getFloat64(s + 6, true), ixfe)); break;
         }
         case 0x027E: { // RK
           const row = dv.getUint16(s, true), col = dv.getUint16(s + 2, true);
-          put(row, col, rkToNumber(dv.getUint32(s + 6, true))); break;
+          const ixfe = dv.getUint16(s + 4, true);
+          put(row, col, asValue(rkToNumber(dv.getUint32(s + 6, true)), ixfe)); break;
         }
         case 0x00BD: { // MULRK
           const row = dv.getUint16(s, true), first = dv.getUint16(s + 2, true);
           const last = dv.getUint16(s + rec.len - 2, true);
           let off = s + 4;
-          for (let c = first; c <= last; c++) { const rk = dv.getUint32(off + 2, true); put(row, c, rkToNumber(rk)); off += 6; }
+          for (let c = first; c <= last; c++) {
+            const ixfe = dv.getUint16(off, true);
+            const rk = dv.getUint32(off + 2, true);
+            put(row, c, asValue(rkToNumber(rk), ixfe)); off += 6;
+          }
           break;
         }
         case 0x0204: { // LABEL (BIFF8 unicode)
@@ -820,9 +1512,15 @@ const CsvReader = (function () {
     if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // BOM 제거
     return text;
   }
-  function parse(text) {
+  // 큰 파일에서도 UI 가 멈추지 않도록 청크 단위로 파싱하며 진행률을 보고한다.
+  async function parse(text, onProgress) {
     const rows = []; let row = [], field = "", inQuotes = false;
+    const CHUNK = 262144; // 256K 문자마다 이벤트 루프에 양보
     for (let i = 0; i < text.length; i++) {
+      if (onProgress && i > 0 && i % CHUNK === 0) {
+        onProgress(Math.round((i / text.length) * 100));
+        await new Promise((r) => setTimeout(r, 0));
+      }
       const ch = text[i];
       if (inQuotes) {
         if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
@@ -838,8 +1536,8 @@ const CsvReader = (function () {
     if (field !== "" || row.length) { row.push(field); rows.push(row); }
     return rows;
   }
-  function read(buffer) {
-    const raw = parse(decode(buffer)).filter(r => !(r.length === 1 && r[0] === ""));
+  async function read(buffer, onProgress) {
+    const raw = (await parse(decode(buffer), onProgress)).filter(r => !(r.length === 1 && r[0] === ""));
     if (!raw.length) return { columns: [], rows: [] };
     const columns = raw[0].map((c, i) => (c && c.trim() !== "") ? c : ("열" + (i + 1)));
     const rows = raw.slice(1);
@@ -850,413 +1548,170 @@ const CsvReader = (function () {
   return { read, parse, decode };
 })();
 
-/** 확장자에 따라 적절한 리더로 파일을 읽어 Table 을 반환한다. */
-async function readFile(file) {
+/** 확장자에 따라 적절한 리더로 파일을 읽어 Table 을 반환한다.
+ *  onProgress(0~100, 메시지) 로 업로드/파싱 단계 진행률을 보고한다(선택). */
+async function readFile(file, onProgress) {
+  const report = (pct, msg) => { if (onProgress) onProgress(pct, msg); };
+  const yieldUi = () => new Promise((r) => setTimeout(r, 0));
   const name = file.name.toLowerCase();
+  report(5, "파일을 메모리로 읽고 있습니다...");
   const buf = new Uint8Array(await file.arrayBuffer());
   let raw;
-  if (name.endsWith(".csv")) raw = CsvReader.read(buf);
-  else if (name.endsWith(".xlsx")) raw = XlsxReader.read(buf);
-  else if (name.endsWith(".xls")) raw = XlsReader.read(buf);
-  else throw new Error("지원하지 않는 파일 형식입니다.");
+  if (name.endsWith(".csv")) {
+    report(10, "CSV 내용을 해석하고 있습니다...");
+    raw = await CsvReader.read(buf, (p) => report(10 + Math.round(p * 0.85), "CSV 내용을 해석하고 있습니다... (" + p + "%)"));
+  } else if (name.endsWith(".xlsx")) {
+    report(20, "압축을 해제하고 있습니다..."); await yieldUi();
+    raw = XlsxReader.read(buf);
+    report(85, "시트 내용을 정리하고 있습니다..."); await yieldUi();
+  } else if (name.endsWith(".xls")) {
+    report(20, "엑셀(xls) 내용을 해석하고 있습니다..."); await yieldUi();
+    raw = XlsReader.read(buf);
+  } else throw new Error("지원하지 않는 파일 형식입니다.");
   if (!raw.columns.length) throw new Error("데이터를 읽지 못했습니다(빈 파일 또는 형식 오류).");
+  report(100, "파일 읽기가 끝났습니다.");
   return raw; // {columns, rows}
 }
 
 /* =====================================================================
- * 4. 컬럼 타입 자동 분석
- * ===================================================================== */
-const ColumnAnalyzer = (function () {
-  const RATIO = 0.8;
-  function detectType(values) {
-    const nonMissing = values.filter(v => !Values.isMissing(v));
-    if (!nonMissing.length) return "String";
-    let num = 0, date = 0;
-    for (const v of nonMissing) {
-      if (typeof v === "number") num++;
-      else if (v instanceof Date) date++;
-      else if (Values.toNumber(v) !== null) num++;
-      else if (Values.toDate(v) !== null) date++;
-    }
-    const total = nonMissing.length;
-    if (num / total >= RATIO) return "Number";
-    if (date / total >= RATIO) return "Date";
-    return "String";
-  }
-  function analyze(table) {
-    return table.columns.map((name, idx) => ({
-      name, type: detectType(table.rows.map(r => r[idx]))
-    }));
-  }
-  function numericColumns(infos) { return infos.filter(i => i.type === "Number").map(i => i.name); }
-  function buildNumericConfigs(table, infos) {
-    const configs = [];
-    for (const info of infos) {
-      if (info.type !== "Number") continue;
-      const idx = table.columns.indexOf(info.name);
-      const nums = table.rows.map(r => Values.toNumber(r[idx])).filter(n => n !== null);
-      const min = nums.length ? Math.min(...nums) : 0;
-      const max = nums.length ? Math.max(...nums) : 0;
-      configs.push({ name: info.name, actualMin: min, actualMax: max, allowMin: min, allowMax: max, use: true });
-    }
-    return configs;
-  }
-  return { analyze, numericColumns, buildNumericConfigs };
-})();
-
-/* =====================================================================
- * 5. 이상치 탐지 알고리즘 (공통 인터페이스: detect(ctx) -> [{row, reason}])
- *    ctx = { table, numericColumns, numericFrame(col->number[]|null), config }
- * ===================================================================== */
-const Detectors = (function () {
-  const F = Values.fmtNum;
-
-  // ① 결측치
-  function missing(ctx) {
-    const out = [];
-    for (let r = 0; r < ctx.table.rows.length; r++) {
-      const cols = [];
-      ctx.table.columns.forEach((c, i) => { if (Values.isMissing(ctx.table.rows[r][i])) cols.push(c); });
-      if (cols.length) out.push({ row: r, reason: "결측치 [" + cols.join(", ") + "]" });
-    }
-    return out;
-  }
-
-  // ② 중복 데이터 (모든 컬럼 값이 동일한 행)
-  function duplicate(ctx) {
-    const seen = new Map(); const groups = new Map();
-    for (let r = 0; r < ctx.table.rows.length; r++) {
-      const key = ctx.table.rows[r].map(Values.cellText).join("");
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(r);
-    }
-    const out = [];
-    for (const rowsIdx of groups.values())
-      if (rowsIdx.length > 1) rowsIdx.forEach(r => out.push({ row: r, reason: "중복 데이터" }));
-    return out;
-  }
-
-  // ③ 범위 검사
-  function range(ctx) {
-    const out = [];
-    for (const cfg of ctx.config.numericConfigs) {
-      if (!cfg.use) continue;
-      const col = ctx.numericFrame[cfg.name]; if (!col) continue;
-      for (let r = 0; r < col.length; r++) {
-        const v = col[r]; if (v === null) continue;
-        if (v < cfg.allowMin || v > cfg.allowMax)
-          out.push({ row: r, reason: "범위 초과 [" + cfg.name + "] (허용:" + F(cfg.allowMin) + "~" + F(cfg.allowMax) + ", 실제:" + F(v) + ")" });
-      }
-    }
-    return out;
-  }
-
-  // ④ 증감률 검사 (이전 행 대비)
-  function changeRate(ctx) {
-    const out = []; const th = ctx.config.changeRateThreshold;
-    for (const name of ctx.numericColumns) {
-      const col = ctx.numericFrame[name]; let prev = null;
-      for (let r = 0; r < col.length; r++) {
-        const cur = col[r];
-        if (cur === null) { prev = null; continue; }
-        if (prev !== null && prev !== 0) {
-          const ch = (cur - prev) / Math.abs(prev) * 100;
-          if (Math.abs(ch) > th) out.push({ row: r, reason: "증감률 이상 [" + name + "] (" + (ch >= 0 ? "+" : "-") + F(Math.abs(ch)) + "%)" });
-        }
-        prev = cur;
-      }
-    }
-    return out;
-  }
-
-  // ⑤ IQR
-  function iqr(ctx) {
-    const out = [];
-    for (const name of ctx.numericColumns) {
-      const col = ctx.numericFrame[name];
-      const vals = col.filter(v => v !== null).sort((a, b) => a - b);
-      if (vals.length < 4) continue;
-      const q = (p) => { const pos = (vals.length - 1) * p; const lo = Math.floor(pos), hi = Math.ceil(pos); return vals[lo] + (vals[hi] - vals[lo]) * (pos - lo); };
-      const q1 = q(0.25), q3 = q(0.75), iqrv = q3 - q1;
-      if (iqrv === 0) continue;
-      const lower = q1 - 1.5 * iqrv, upper = q3 + 1.5 * iqrv;
-      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; if (v < lower || v > upper) out.push({ row: r, reason: "IQR 이상 [" + name + "]" }); }
-    }
-    return out;
-  }
-
-  // ⑥ Z-Score
-  function zscore(ctx) {
-    const out = []; const th = ctx.config.zscoreThreshold;
-    for (const name of ctx.numericColumns) {
-      const col = ctx.numericFrame[name];
-      const vals = col.filter(v => v !== null);
-      if (vals.length < 2) continue;
-      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-      const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length);
-      if (std === 0) continue;
-      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; const z = (v - mean) / std; if (Math.abs(z) > th) out.push({ row: r, reason: "Z-Score 이상 [" + name + "] (Z=" + F(Math.round(Math.abs(z) * 100) / 100) + ")" }); }
-    }
-    return out;
-  }
-
-  // --- 머신러닝 공통: 특징 행렬(표준화 옵션) ---
-  function featureMatrix(ctx, standardize) {
-    const cols = ctx.numericColumns;
-    if (!cols.length) return { X: [], pos: [] };
-    const X = [], pos = [];
-    for (let r = 0; r < ctx.table.rows.length; r++) {
-      const row = []; let ok = true;
-      for (const c of cols) { const v = ctx.numericFrame[c][r]; if (v === null) { ok = false; break; } row.push(v); }
-      if (ok) { X.push(row); pos.push(r); }
-    }
-    if (standardize && X.length) {
-      for (let j = 0; j < cols.length; j++) {
-        let m = 0; for (const row of X) m += row[j]; m /= X.length;
-        let s = 0; for (const row of X) s += (row[j] - m) * (row[j] - m); s = Math.sqrt(s / X.length) || 1;
-        for (const row of X) row[j] = (row[j] - m) / s;
-      }
-    }
-    return { X, pos };
-  }
-  function dist(a, b) { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
-
-  // 재현성 있는 난수 (mulberry32)
-  function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-
-  // ⑦ Isolation Forest
-  function isolationForest(ctx) {
-    const { X, pos } = featureMatrix(ctx, false);
-    const n = X.length, dim = X.length ? X[0].length : 0;
-    if (n < 2 || dim === 0) return [];
-    const rand = rng(42);
-    const nTrees = 100, psi = Math.min(256, n);
-    const heightLimit = Math.ceil(Math.log2(psi));
-    const c = (m) => m > 2 ? 2 * (Math.log(m - 1) + 0.5772156649) - 2 * (m - 1) / m : (m === 2 ? 1 : 0);
-
-    function buildTree(idxs, depth) {
-      if (depth >= heightLimit || idxs.length <= 1) return { size: idxs.length, ext: true };
-      const q = Math.floor(rand() * dim);
-      let mn = Infinity, mx = -Infinity;
-      for (const i of idxs) { const v = X[i][q]; if (v < mn) mn = v; if (v > mx) mx = v; }
-      if (mn === mx) return { size: idxs.length, ext: true };
-      const p = mn + rand() * (mx - mn);
-      const left = [], right = [];
-      for (const i of idxs) (X[i][q] < p ? left : right).push(i);
-      return { ext: false, q, p, left: buildTree(left, depth + 1), right: buildTree(right, depth + 1) };
-    }
-    function pathLen(x, node, depth) {
-      if (node.ext) return depth + c(node.size);
-      return x[node.q] < node.p ? pathLen(x, node.left, depth + 1) : pathLen(x, node.right, depth + 1);
-    }
-    const trees = [];
-    for (let t = 0; t < nTrees; t++) {
-      const sample = [];
-      for (let k = 0; k < psi; k++) sample.push(Math.floor(rand() * n));
-      trees.push(buildTree(sample, 0));
-    }
-    const cPsi = c(psi) || 1;
-    const scores = X.map(x => { let sum = 0; for (const tr of trees) sum += pathLen(x, tr, 0); return Math.pow(2, -(sum / nTrees) / cPsi); });
-    const k = Math.max(1, Math.round(ctx.config.isoContamination * n));
-    const threshold = scores.slice().sort((a, b) => b - a)[Math.min(k, n) - 1];
-    const out = [];
-    for (let i = 0; i < n; i++) if (scores[i] >= threshold) out.push({ row: pos[i], reason: "Isolation Forest 이상" });
-    return out;
-  }
-
-  // ⑧ LOF
-  function lof(ctx) {
-    const { X, pos } = featureMatrix(ctx, true);
-    const n = X.length; if (n < 2) return [];
-    const k = Math.min(ctx.config.lofNeighbors, n - 1); if (k < 1) return [];
-    const D = []; for (let i = 0; i < n; i++) D.push(new Float64Array(n));
-    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const d = dist(X[i], X[j]); D[i][j] = d; D[j][i] = d; }
-    const neigh = [], kdist = new Float64Array(n);
-    for (let i = 0; i < n; i++) {
-      const order = []; for (let j = 0; j < n; j++) if (j !== i) order.push(j);
-      order.sort((a, b) => D[i][a] - D[i][b]);
-      const kn = order.slice(0, k); neigh.push(kn); kdist[i] = D[i][kn[kn.length - 1]];
-    }
-    const lrd = new Float64Array(n);
-    for (let i = 0; i < n; i++) { let sum = 0; for (const o of neigh[i]) sum += Math.max(kdist[o], D[i][o]); lrd[i] = sum === 0 ? Infinity : neigh[i].length / sum; }
-    const out = [];
-    for (let i = 0; i < n; i++) { let sum = 0; for (const o of neigh[i]) sum += lrd[o]; const lofv = (lrd[i] === Infinity) ? 1 : (sum / neigh[i].length) / lrd[i]; if (lofv > 1.5) out.push({ row: pos[i], reason: "LOF 이상" }); }
-    return out;
-  }
-
-  // ⑨ DBSCAN
-  function dbscan(ctx) {
-    const { X, pos } = featureMatrix(ctx, true);
-    const n = X.length; if (n < 1) return [];
-    const eps = ctx.config.dbscanEps, minPts = ctx.config.dbscanMinSamples;
-    const neighbors = (i) => { const res = []; for (let j = 0; j < n; j++) if (dist(X[i], X[j]) <= eps) res.push(j); return res; };
-    const labels = new Int32Array(n).fill(-2); // -2 미방문, -1 노이즈, >=0 군집
-    let cid = 0;
-    for (let i = 0; i < n; i++) {
-      if (labels[i] !== -2) continue;
-      const nb = neighbors(i);
-      if (nb.length < minPts) { labels[i] = -1; continue; }
-      labels[i] = cid;
-      const queue = nb.slice();
-      for (let qi = 0; qi < queue.length; qi++) {
-        const j = queue[qi];
-        if (labels[j] === -1) labels[j] = cid;
-        if (labels[j] !== -2) continue;
-        labels[j] = cid;
-        const nb2 = neighbors(j);
-        if (nb2.length >= minPts) for (const x of nb2) queue.push(x);
-      }
-      cid++;
-    }
-    const out = [];
-    for (let i = 0; i < n; i++) if (labels[i] === -1) out.push({ row: pos[i], reason: "DBSCAN 이상" });
-    return out;
-  }
-
-  // 활성화된 detector 목록 (순서 = 사유 나열 순서)
-  function active(config) {
-    const reg = [
-      [config.missing, "결측치", missing], [config.duplicate, "중복 데이터", duplicate],
-      [config.range, "범위 초과", range], [config.change, "증감률 이상", changeRate],
-      [config.iqr, "IQR", iqr], [config.zscore, "Z-Score", zscore],
-      [config.iforest, "Isolation Forest", isolationForest],
-      [config.lof, "LOF", lof], [config.dbscan, "DBSCAN", dbscan],
-    ];
-    return reg.filter(x => x[0]).map(x => ({ name: x[1], fn: x[2] }));
-  }
-  return { active };
-})();
-
-/* =====================================================================
- * 6. 분석 오케스트레이션 (진행률 콜백 + UI 양보를 위한 비동기)
- * ===================================================================== */
-async function runAnalysis(table, config, onProgress) {
-  const sleep = () => new Promise(r => setTimeout(r, 0));
-  onProgress(2, "컬럼 타입 분석 중...");
-  const infos = ColumnAnalyzer.analyze(table);
-  const numericColumns = ColumnAnalyzer.numericColumns(infos);
-  const numericFrame = {};
-  for (const name of numericColumns) {
-    const idx = table.columns.indexOf(name);
-    numericFrame[name] = table.rows.map(r => Values.toNumber(r[idx]));
-  }
-  const ctx = { table, numericColumns, numericFrame, config };
-
-  const detectors = Detectors.active(config);
-  const reasonsByRow = new Map();
-  for (let i = 0; i < detectors.length; i++) {
-    onProgress(Math.round((i / detectors.length) * 90) + 5, detectors[i].name + " 분석 중...");
-    await sleep();
-    try {
-      const findings = detectors[i].fn(ctx);
-      for (const f of findings) {
-        if (!reasonsByRow.has(f.row)) reasonsByRow.set(f.row, []);
-        reasonsByRow.get(f.row).push(f.reason);
-      }
-    } catch (e) { console.warn(detectors[i].name + " 실패:", e); }
-  }
-  onProgress(96, "결과 집계 중...");
-  await sleep();
-  const flags = [], reasons = [];
-  for (let r = 0; r < table.rows.length; r++) {
-    const rr = reasonsByRow.get(r);
-    if (rr) { flags.push("이상"); reasons.push(rr.join(", ")); }
-    else { flags.push(""); reasons.push(""); }
-  }
-  onProgress(100, "분석 완료");
-  return { table, infos, flags, reasons, anomalyCount: flags.filter(f => f).length };
-}
-
-/* =====================================================================
- * 7. 결과 Excel 작성기 (Result / Anomaly 2시트, 이상 행 노란색)
+ * 7. 결과 Excel 작성기
+ *
+ *  - buildWorkbook(sheets): 범용 다중 시트 작성기.
+ *    행 배경(없음/노랑/초록/빨강)과 날짜 셀(실제 날짜 형식)을 지원한다.
+ *  - build(result): 단일 분석 결과(Result/Anomaly 2시트, 이상 행 노란색).
+ *  - "=", "@" 로 시작하는 문자열은 수식 주입(CSV Injection) 방어를 위해
+ *    앞에 작은따옴표(')를 붙여 항상 텍스트로 기록한다.
  * ===================================================================== */
 const XlsxWriter = (function () {
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   function colLetter(idx) { let s = ""; idx++; while (idx > 0) { const m = (idx - 1) % 26; s = String.fromCharCode(65 + m) + s; idx = Math.floor((idx - 1) / 26); } return s; }
 
-  function cellXml(ref, value, styled) {
-    const sAttr = styled ? ' s="1"' : "";
-    if (Values.isMissing(value)) return '<c r="' + ref + '"' + sAttr + '/>';
-    if (typeof value === "number" && isFinite(value))
-      return '<c r="' + ref + '"' + sAttr + '><v>' + value + '</v></c>';
-    const text = Values.cellText(value);
-    return '<c r="' + ref + '" t="inlineStr"' + sAttr + '><is><t xml:space="preserve">' + esc(text) + '</t></is></c>';
+  // 채움 슬롯: 0 없음, 1 노랑(이상/변경), 2 초록(추가), 3 빨강(삭제)
+  // 셀 서식 인덱스 = 채움슬롯*3 + (0 일반 | 1 날짜 | 2 날짜시각)
+  const FILL_COLORS = [null, "FFFFF2CC", "FFE9F7EC", "FFFDECEA"];
+
+  function dateToSerial(d) {
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+      d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds()) / 86400000 + 25569;
   }
 
-  function sheetXml(columns, rows, flags) {
-    // flags: 각 데이터 행의 이상 여부(true면 노란색). 헤더는 스타일 없음.
+  function cellXml(ref, value, fillSlot) {
+    const base = fillSlot * 3;
+    if (Values.isMissing(value)) return base ? '<c r="' + ref + '" s="' + base + '"/>' : '<c r="' + ref + '"/>';
+    if (value instanceof Date) {
+      const hasTime = value.getUTCHours() || value.getUTCMinutes() || value.getUTCSeconds();
+      const s = base + (hasTime ? 2 : 1);
+      return '<c r="' + ref + '" s="' + s + '"><v>' + dateToSerial(value) + "</v></c>";
+    }
+    if (typeof value === "number" && isFinite(value)) {
+      const sAttr = base ? ' s="' + base + '"' : "";
+      return '<c r="' + ref + '"' + sAttr + "><v>" + value + "</v></c>";
+    }
+    let text = Values.cellText(value);
+    // 수식 주입 방어: 스프레드시트가 수식으로 해석할 수 있는 접두 문자를 무력화
+    if (/^[=@]/.test(text)) text = "'" + text;
+    const sAttr = base ? ' s="' + base + '"' : "";
+    return '<c r="' + ref + '" t="inlineStr"' + sAttr + '><is><t xml:space="preserve">' + esc(text) + "</t></is></c>";
+  }
+
+  /** 시트 XML. fillSlots[r] = 데이터 r행의 채움 슬롯(0~3). */
+  function sheetXml(columns, rows, fillSlots) {
     let x = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
-    // 헤더
     x += '<row r="1">';
-    columns.forEach((c, i) => x += cellXml(colLetter(i) + "1", c, false));
-    x += '</row>';
-    // 데이터
+    columns.forEach((c, i) => x += cellXml(colLetter(i) + "1", c, 0));
+    x += "</row>";
     for (let r = 0; r < rows.length; r++) {
-      const styled = flags[r] === true;
+      const slot = fillSlots ? (fillSlots[r] || 0) : 0;
       x += '<row r="' + (r + 2) + '">';
-      for (let c = 0; c < columns.length; c++) x += cellXml(colLetter(c) + (r + 2), rows[r][c], styled);
-      x += '</row>';
+      for (let c = 0; c < columns.length; c++) x += cellXml(colLetter(c) + (r + 2), rows[r][c], slot);
+      x += "</row>";
     }
-    x += '</sheetData></worksheet>';
+    x += "</sheetData></worksheet>";
     return x;
   }
 
-  function build(result, flagColName, reasonColName) {
-    const enc = new TextEncoder();
-    const cols = result.table.columns.concat([flagColName, reasonColName]);
-    // Result 시트 데이터
-    const resultRows = result.table.rows.map((r, i) => r.concat([result.flags[i], result.reasons[i]]));
-    const resultFlags = result.flags.map(f => f === "이상");
-    // Anomaly 시트 데이터
-    const anomRows = [], anomFlags = [];
-    for (let i = 0; i < resultRows.length; i++) if (result.flags[i] === "이상") { anomRows.push(resultRows[i]); anomFlags.push(true); }
+  function stylesXml() {
+    // numFmt 164: 날짜, 165: 날짜+시각
+    let fills = '<fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>';
+    for (let f = 1; f <= 3; f++)
+      fills += '<fill><patternFill patternType="solid"><fgColor rgb="' + FILL_COLORS[f] + '"/><bgColor indexed="64"/></patternFill></fill>';
+    let xfs = "";
+    for (let f = 0; f <= 3; f++) {
+      const fillId = f === 0 ? 0 : f + 1; // 채움슬롯 1..3 -> fillId 2..4
+      const fillAttr = f === 0 ? "" : ' applyFill="1"';
+      xfs += '<xf numFmtId="0" fontId="0" fillId="' + fillId + '" borderId="0" xfId="0"' + fillAttr + "/>";
+      xfs += '<xf numFmtId="164" fontId="0" fillId="' + fillId + '" borderId="0" xfId="0" applyNumberFormat="1"' + fillAttr + "/>";
+      xfs += '<xf numFmtId="165" fontId="0" fillId="' + fillId + '" borderId="0" xfId="0" applyNumberFormat="1"' + fillAttr + "/>";
+    }
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="2"><numFmt numFmtId="164" formatCode="yyyy-mm-dd"/>' +
+      '<numFmt numFmtId="165" formatCode="yyyy-mm-dd hh:mm:ss"/></numFmts>' +
+      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="5">' + fills + "</fills>" +
+      '<borders count="1"><border/></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="12">' + xfs + "</cellXfs>" +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  }
 
-    const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  /** 범용 워크북 작성기. sheets = [{name, columns, rows, fillSlots}] */
+  function buildWorkbook(sheets) {
+    const enc = new TextEncoder();
+    let contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
       '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
       '<Default Extension="xml" ContentType="application/xml"/>' +
       '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
-      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
-      '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-      '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
-      '</Types>';
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>';
+    sheets.forEach((s, i) => {
+      contentTypes += '<Override PartName="/xl/worksheets/sheet' + (i + 1) + '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    });
+    contentTypes += "</Types>";
     const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
       '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
-      '</Relationships>';
+      "</Relationships>";
+    let sheetTags = "", relTags = "";
+    sheets.forEach((s, i) => {
+      sheetTags += '<sheet name="' + esc(s.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>';
+      relTags += '<Relationship Id="rId' + (i + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>';
+    });
+    relTags += '<Relationship Id="rId' + (sheets.length + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
     const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
-      '<sheets><sheet name="Result" sheetId="1" r:id="rId1"/><sheet name="Anomaly" sheetId="2" r:id="rId2"/></sheets></workbook>';
+      "<sheets>" + sheetTags + "</sheets></workbook>";
     const wbRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
-      '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
-      '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>' +
-      '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
-      '</Relationships>';
-    const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
-      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
-      '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts>' +
-      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>' +
-      '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF2CC"/><bgColor indexed="64"/></patternFill></fill></fills>' +
-      '<borders count="1"><border/></borders>' +
-      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
-      '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
-      '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/></cellXfs>' +
-      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + relTags + "</Relationships>";
 
     const entries = [
       { name: "[Content_Types].xml", data: enc.encode(contentTypes) },
       { name: "_rels/.rels", data: enc.encode(rels) },
       { name: "xl/workbook.xml", data: enc.encode(workbook) },
       { name: "xl/_rels/workbook.xml.rels", data: enc.encode(wbRels) },
-      { name: "xl/styles.xml", data: enc.encode(styles) },
-      { name: "xl/worksheets/sheet1.xml", data: enc.encode(sheetXml(cols, resultRows, resultFlags)) },
-      { name: "xl/worksheets/sheet2.xml", data: enc.encode(sheetXml(cols, anomRows, anomFlags)) },
+      { name: "xl/styles.xml", data: enc.encode(stylesXml()) },
     ];
+    sheets.forEach((s, i) => {
+      entries.push({ name: "xl/worksheets/sheet" + (i + 1) + ".xml", data: enc.encode(sheetXml(s.columns, s.rows, s.fillSlots)) });
+    });
     return Zip.write(entries);
   }
-  return { build };
+
+  /** 단일 분석 결과: Result(전체) + Anomaly(이상만), 이상 행 노란색. */
+  function build(result, flagColName, reasonColName) {
+    const cols = result.table.columns.concat([flagColName, reasonColName]);
+    const resultRows = result.table.rows.map((r, i) => r.concat([result.flags[i], result.reasons[i]]));
+    const resultSlots = result.flags.map((f) => (f === "이상" ? 1 : 0));
+    const anomRows = [], anomSlots = [];
+    for (let i = 0; i < resultRows.length; i++)
+      if (result.flags[i] === "이상") { anomRows.push(resultRows[i]); anomSlots.push(1); }
+    return buildWorkbook([
+      { name: "Result", columns: cols, rows: resultRows, fillSlots: resultSlots },
+      { name: "Anomaly", columns: cols, rows: anomRows, fillSlots: anomSlots },
+    ]);
+  }
+  return { build, buildWorkbook };
 })();
 
 /* =====================================================================
@@ -1270,41 +1725,185 @@ const XlsxWriter = (function () {
   function setStatus(msg) { $("status").textContent = msg; }
   function setProgress(pct) { $("progressBar").style.width = pct + "%"; }
 
-  // 파일 선택
-  $("btnPick").addEventListener("click", () => $("fileInput").click());
-  $("fileInput").addEventListener("change", async (e) => {
-    const file = e.target.files[0]; if (!file) return;
+  // ----- 업로드 설정/상태 -----
+  const ALLOWED_EXT = ["csv", "xlsx", "xls"];   // xls 는 기존 기능 유지를 위해 포함
+  const MAX_FILE_SIZE = 50 * 1024 * 1024;       // 50MB
+  let isUploading = false;                        // 중복 업로드 방지 플래그
+
+  function setDzError(msg) {
+    const el = $("dzError");
+    if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = "⚠ " + msg; el.classList.remove("hidden");
+  }
+  function setUploading(on) {
+    isUploading = on;
+    $("dzLoading").classList.toggle("hidden", !on);
+    $("dropZone").classList.toggle("busy", on);
+    $("btnPick").disabled = on;
+    $("btnRun").disabled = on;
+  }
+  // ----- 업로드 영역 문구(파일명 표시 / 기본 문구 복원) -----
+  const DZ_DEFAULT_TEXT = "CSV 또는 XLSX 파일을 여기에 드래그하거나 클릭하여 업로드";
+  const DZ_DEFAULT_SUB = "허용 형식: .csv, .xlsx (구형 .xls 도 지원) · 최대 50MB";
+  const STATUS_IDLE = "파일을 선택해 주시면 분석을 시작할 수 있습니다.";
+  /** 업로드 성공 시: 드롭존 문구를 파일명으로 바꾸고 제거 버튼을 보여준다. */
+  function setDzLoaded(displayName) {
+    $("dzText").textContent = displayName;
+    $("dzText").classList.add("dz-file");
+    $("dzSub").textContent = "다른 파일을 드래그하거나 클릭하시면 새 파일로 교체됩니다.";
+    $("dzClear").classList.remove("hidden");
+  }
+  /** 기본 안내 문구로 복원한다. */
+  function setDzDefault() {
+    $("dzText").textContent = DZ_DEFAULT_TEXT;
+    $("dzText").classList.remove("dz-file");
+    $("dzSub").textContent = DZ_DEFAULT_SUB;
+    $("dzClear").classList.add("hidden");
+  }
+  /** 선택한 파일과 분석 상태를 모두 초기화한다(파일 제거/Reset). */
+  function resetUpload() {
+    table = null; numericConfigs = []; lastResult = null;
+    renderNumericTable();
+    $("fileInfo").textContent = "";
+    $("fileName").textContent = "선택된 파일이 없습니다.";
+    $("fileName").classList.add("filecue");
+    $("resultPanel").classList.add("hidden");
+    $("outName").value = "anomaly_result.xlsx";
+    setDzDefault(); setDzError("");
+    setStatus(STATUS_IDLE); setProgress(0);
+  }
+  // 중복/특수 컬럼명 안전화: 빈 이름 보정 + 중복 시 사용 중이 아닌 접미사 부여
+  function dedupeColumns(cols) {
+    const used = new Set();
+    return cols.map((c, i) => {
+      let name = (c === null || c === undefined || String(c).trim() === "") ? ("열" + (i + 1)) : String(c);
+      if (used.has(name)) {
+        let k = 2;
+        while (used.has(name + "_" + k)) k++;
+        name = name + "_" + k;
+      }
+      used.add(name);
+      return name;
+    });
+  }
+
+  /** 업로드 파일 공통 검증(확장자/빈 파일/크기/매직바이트). 문제가 있으면 Error 를 던진다.
+   *  단일 분석과 두 파일 비교가 동일한 규칙을 공유한다. */
+  async function validateUploadFile(file) {
+    const ext = (file.name.indexOf(".") >= 0 ? file.name.split(".").pop() : "").toLowerCase();
+    if (!ALLOWED_EXT.includes(ext))
+      throw new Error("지원하지 않는 파일 형식입니다: " + (ext ? "." + ext : "(확장자 없음)") + " · CSV 또는 XLSX 파일을 올려 주세요.");
+    if (file.size === 0) throw new Error("빈 파일입니다. 내용이 있는 파일을 선택해 주세요.");
+    if (file.size > MAX_FILE_SIZE)
+      throw new Error("파일이 너무 큽니다. 최대 50MB까지 업로드하실 수 있습니다. (현재 " + (file.size / 1048576).toFixed(1) + "MB)");
+    // 매직바이트로 실제 형식 확인(확장자 위조/잘못된 MIME 방어)
+    const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+    const isZip = head[0] === 0x50 && head[1] === 0x4B && head[2] === 0x03 && head[3] === 0x04; // "PK.."
+    const isOle = head[0] === 0xD0 && head[1] === 0xCF && head[2] === 0x11 && head[3] === 0xE0; // 구형 .xls(OLE2)
+    if (ext === "csv" && (isZip || isOle))
+      throw new Error("확장자는 .csv 이지만 실제 내용은 엑셀 파일로 보입니다. .xlsx 형식으로 다시 저장하신 뒤 시도해 주세요.");
+    if (ext === "xlsx" && !isZip)
+      throw new Error("올바른 xlsx(Excel) 파일이 아닙니다. 파일이 손상되었거나 확장자가 실제 형식과 다를 수 있습니다.");
+    return ext;
+  }
+
+  /** 검증 → 로딩 → 읽기 → 렌더까지 담당하는 공통 업로드 처리기(버튼/드롭 공용). */
+  async function handleFile(file, displayName) {
+    if (!file) return;
+    if (isUploading) { setDzError("이미 다른 파일을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."); return; }
+    setDzError("");
+
+    // --- 사전 검증(실패 시 기존에 불러온 데이터는 그대로 유지) ---
+    try { await validateUploadFile(file); }
+    catch (err) { setDzError(String((err && err.message) || err)); return; }
+
+    setUploading(true);
+    setStatus("파일을 읽고 있습니다..."); setProgress(0);
     $("fileName").textContent = file.name; $("fileName").classList.remove("filecue");
-    setStatus("파일 읽는 중..."); setProgress(0);
     try {
-      const raw = await readFile(file);
-      table = new TableWrapper(raw.columns, raw.rows);
+      await new Promise((r) => setTimeout(r, 0)); // 로딩 표시가 그려질 기회를 준다
+      // 업로드/파싱 단계 진행률을 진행 막대에 표시한다.
+      const raw = await readFile(file, (pct, msg) => { setProgress(pct); setStatus(msg); });
+      const columns = dedupeColumns(raw.columns);
+      table = new TableWrapper(columns, raw.rows);
       const infos = ColumnAnalyzer.analyze(table);
       numericConfigs = ColumnAnalyzer.buildNumericConfigs(table, infos);
       renderNumericTable();
-      const typeSummary = infos.map(i => i.name + "(" + i.type + ")").join(", ");
+      const typeSummary = infos.map((i) => i.name + "(" + i.type + ")").join(", ");
       $("fileInfo").textContent = "행 " + table.rows.length + " × 열 " + table.columns.length +
         " · 숫자 컬럼 " + numericConfigs.length + "개 · 타입: " + typeSummary;
       $("outName").value = file.name.replace(/\.[^.]+$/, "") + "_result.xlsx";
-      setStatus("파일 로드 완료. [분석 시작] 을 누르세요.");
-      $("resultPanel").classList.add("hidden");
+      $("resultPanel").classList.add("hidden"); lastResult = null;
+      // 업로드/파싱 완료: "업로드 중..." 을 지우고 드롭존에 파일명을 표시한다.
+      setDzLoaded(displayName || file.name);
+      if (table.rows.length === 0)
+        setStatus("파일을 불러왔지만 분석할 데이터 행이 없습니다. (헤더만 있는 파일입니다)");
+      else
+        setStatus("파일을 불러왔습니다. [분석 시작] 버튼을 눌러 주세요.");
     } catch (err) {
       console.error(err);
-      alert("파일 읽기 실패: " + err.message);
-      setStatus("파일 읽기 실패");
+      setDzError("파일을 읽지 못했습니다: " + (err && err.message ? err.message : err));
+      setStatus("파일을 읽지 못했습니다. 다른 파일로 다시 시도해 주세요.");
+      // 실패 시 상태 초기화(부분 반영 방지) 및 기본 안내 문구 복원
+      table = null; numericConfigs = []; renderNumericTable();
+      $("fileInfo").textContent = ""; $("fileName").textContent = "선택된 파일이 없습니다.";
+      $("fileName").classList.add("filecue");
+      setDzDefault();
+    } finally {
+      setUploading(false);
+      $("fileInput").value = ""; // 같은 파일 재선택 시에도 change 가 발생하도록 초기화
     }
+  }
+
+  /** 여러 개가 들어오면 첫 번째만 분석하고, 표시는 "첫 파일명 (외 N개)" 형태로 한다. */
+  function handleFiles(fileList) {
+    if (!fileList || !fileList.length) return;
+    const extra = fileList.length - 1;
+    if (extra > 0) setDzError("여러 파일이 감지되어 첫 번째 파일만 분석합니다: " + fileList[0].name);
+    const displayName = extra > 0 ? fileList[0].name + " (외 " + extra + "개)" : fileList[0].name;
+    handleFile(fileList[0], displayName);
+  }
+
+  // 버튼/파일 입력
+  $("btnPick").addEventListener("click", () => { if (!isUploading) $("fileInput").click(); });
+  $("fileInput").addEventListener("change", (e) => { handleFiles(e.target.files); e.target.value = ""; });
+
+  // ----- Drag & Drop -----
+  const dz = $("dropZone");
+  let dragDepth = 0; // 자식 요소 위 이동 시 dragleave 깜빡임 방지용 카운터
+  dz.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; dz.classList.add("dragover"); });
+  dz.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = isUploading ? "none" : "copy"; });
+  dz.addEventListener("dragleave", () => { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; dz.classList.remove("dragover"); } });
+  dz.addEventListener("drop", (e) => {
+    e.preventDefault(); dragDepth = 0; dz.classList.remove("dragover");
+    if (isUploading) { setDzError("이미 다른 파일을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."); return; }
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length) handleFiles(dt.files);
+    else setDzError("드롭하신 항목에서 파일을 찾지 못했습니다. 파일을 드래그하셨는지 확인해 주세요.");
   });
+  dz.addEventListener("click", (e) => { if (e.target === $("dzClear")) return; if (!isUploading) $("fileInput").click(); });
+  dz.addEventListener("keydown", (e) => {
+    if (e.target !== dz) return; // 내부 버튼(파일 제거)의 키 입력은 건드리지 않는다
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!isUploading) $("fileInput").click(); }
+  });
+  // 파일 제거(Reset): 기본 안내 문구로 복원
+  $("dzClear").addEventListener("click", (e) => { e.stopPropagation(); if (!isUploading) resetUpload(); });
+
+  // 영역 밖에 파일을 떨어뜨렸을 때 브라우저가 파일을 열어버리는 것을 방지(데이터 유실/이탈 방지)
+  window.addEventListener("dragover", (e) => { e.preventDefault(); });
+  window.addEventListener("drop", (e) => { e.preventDefault(); });
 
   // 간단한 Table 래퍼 (columns/rows 보관)
   function TableWrapper(columns, rows) { this.columns = columns; this.rows = rows; }
 
   function renderNumericTable() {
     const tb = $("numTableBody"); tb.innerHTML = "";
-    if (!numericConfigs.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">숫자 컬럼이 없습니다.</td></tr>'; return; }
+    if (!table) { tb.innerHTML = '<tr><td colspan="6" class="muted">파일을 먼저 선택해 주세요.</td></tr>'; return; }
+    if (!numericConfigs.length) { tb.innerHTML = '<tr><td colspan="6" class="muted">숫자 컬럼이 없습니다. 범위 검사를 사용하시려면 숫자 컬럼이 필요합니다.</td></tr>'; return; }
     numericConfigs.forEach((cfg, i) => {
       const tr = document.createElement("tr");
       tr.innerHTML =
-        "<td>" + cfg.name + "</td>" +
+        "<td>" + escapeHtml(cfg.name) + "</td>" +
         "<td>" + Values.fmtNum(cfg.actualMin) + "</td>" +
         "<td>" + Values.fmtNum(cfg.actualMax) + "</td>" +
         '<td><input type="number" step="any" value="' + cfg.allowMin + '" data-i="' + i + '" data-k="allowMin"></td>' +
@@ -1335,17 +1934,47 @@ const XlsxWriter = (function () {
     };
   }
 
+  // ----- 분석 실행: Web Worker 우선(대용량에서도 화면이 멈추지 않음), 실패 시 메인 스레드 폴백 -----
+  let analysisWorker;   // undefined=미시도, false=사용 불가, Worker=사용 가능
+  function getAnalysisWorker() {
+    if (analysisWorker !== undefined) return analysisWorker;
+    try {
+      const srcText = document.getElementById("engineScript").textContent;
+      const blobUrl = URL.createObjectURL(new Blob([srcText], { type: "text/javascript" }));
+      analysisWorker = new Worker(blobUrl);
+    } catch (e) {
+      console.warn("Web Worker 를 사용할 수 없어 메인 스레드에서 분석합니다:", e);
+      analysisWorker = false;
+    }
+    return analysisWorker;
+  }
+  /** 워커(가능 시) 또는 메인 스레드에서 분석을 실행한다. */
+  function runAnalysisAsync(tbl, config, onProgress) {
+    const w = getAnalysisWorker();
+    if (!w) return runAnalysis(tbl, config, onProgress); // 폴백
+    return new Promise((resolve, reject) => {
+      w.onmessage = (e) => {
+        const m = e.data;
+        if (m.type === "progress") onProgress(m.pct, m.msg);
+        else if (m.type === "done") resolve({ table: tbl, flags: m.flags, reasons: m.reasons, skipped: m.skipped, anomalyCount: m.anomalyCount });
+        else if (m.type === "error") reject(new Error(m.message));
+      };
+      w.onerror = (e) => reject(new Error(e.message || "워커 실행 오류"));
+      w.postMessage({ columns: tbl.columns, rows: tbl.rows, config });
+    });
+  }
+
   // 분석 시작
   $("btnRun").addEventListener("click", async () => {
-    if (!table) { alert("먼저 파일을 선택하세요."); return; }
+    if (!table) { alert("분석할 파일을 먼저 선택해 주세요."); return; }
     $("btnRun").disabled = true; setProgress(0);
     try {
       const config = collectConfig();
-      lastResult = await runAnalysis(table, config, (pct, msg) => { setProgress(pct); setStatus(msg); });
+      lastResult = await runAnalysisAsync(table, config, (pct, msg) => { setProgress(pct); setStatus(msg); });
       renderResult(lastResult);
       $("resultPanel").classList.remove("hidden");
     } catch (err) {
-      console.error(err); alert("분석 실패: " + err.message); setStatus("분석 실패");
+      console.error(err); alert("분석 중 문제가 발생했습니다: " + err.message); setStatus("분석에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally { $("btnRun").disabled = false; }
   });
 
@@ -1355,33 +1984,49 @@ const XlsxWriter = (function () {
       '<div class="stat"><b>' + total + '</b>전체 행</div>' +
       '<div class="stat"><b style="color:#b23c17">' + anom + '</b>이상 행</div>' +
       '<div class="stat"><b style="color:#2e7d32">' + (total - anom) + '</b>정상 행</div>';
+    // 수행되지 못한 검사가 있으면 사용자에게 분명하게 알린다.
+    const skipped = result.skipped || [];
+    if (skipped.length) {
+      $("skipNote").innerHTML = "⚠ 아래 검사는 수행되지 못했습니다.<br>" +
+        skipped.map((s) => "· " + escapeHtml(s.name) + ": " + escapeHtml(s.message)).join("<br>");
+      $("skipNote").classList.remove("hidden");
+    } else {
+      $("skipNote").classList.add("hidden"); $("skipNote").textContent = "";
+    }
     renderPreview(result);
   }
 
   function renderPreview(result) {
     const onlyAnom = $("onlyAnomaly").checked;
-    const cols = result.table.columns.concat([FLAG_COL, REASON_COL]);
+    const MAX_COLS = 40; // 열이 아주 많은 파일도 미리보기가 느려지지 않도록 상한
+    const srcCols = result.table.columns;
+    const colCut = srcCols.length > MAX_COLS;
+    const useCols = colCut ? srcCols.slice(0, MAX_COLS) : srcCols;
+    const cols = useCols.concat(colCut ? ["…"] : []).concat([FLAG_COL, REASON_COL]);
     const thead = $("resultTable").querySelector("thead");
     const tbody = $("resultTable").querySelector("tbody");
-    thead.innerHTML = "<tr>" + cols.map(c => "<th>" + c + "</th>").join("") + "</tr>";
+    thead.innerHTML = "<tr>" + cols.map(c => "<th>" + escapeHtml(c) + "</th>").join("") + "</tr>";
     let html = "", shown = 0; const LIMIT = 300;
     for (let r = 0; r < result.table.rows.length; r++) {
       const isAnom = result.flags[r] === "이상";
       if (onlyAnom && !isAnom) continue;
       if (shown >= LIMIT) break;
       shown++;
-      const cells = result.table.rows[r].map(v => "<td>" + escapeHtml(Values.cellText(v)) + "</td>").join("");
+      const rowVals = colCut ? result.table.rows[r].slice(0, MAX_COLS) : result.table.rows[r];
+      const cells = rowVals.map(v => "<td>" + escapeHtml(Values.cellText(v)) + "</td>").join("")
+        + (colCut ? "<td>…</td>" : "");
       html += "<tr class='" + (isAnom ? "anomaly" : "") + "'>" + cells +
         "<td>" + result.flags[r] + "</td><td>" + escapeHtml(result.reasons[r]) + "</td></tr>";
     }
     tbody.innerHTML = html || '<tr><td colspan="' + cols.length + '" class="muted">표시할 행이 없습니다.</td></tr>';
     const totalShown = onlyAnom ? result.anomalyCount : result.table.rows.length;
     $("previewNote").textContent = "미리보기: " + shown + " / " + totalShown + " 행 표시" +
-      (totalShown > LIMIT ? " (다운로드 파일에는 전체가 포함됩니다)" : "");
+      (totalShown > LIMIT ? " (다운로드 파일에는 전체가 포함됩니다)" : "") +
+      (colCut ? " · 열은 " + MAX_COLS + "개까지만 미리보기로 표시됩니다(파일에는 전체 포함)" : "");
   }
   $("onlyAnomaly").addEventListener("change", () => { if (lastResult) renderPreview(lastResult); });
 
-  function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
   // 결과 다운로드
   $("btnDownload").addEventListener("click", () => {
@@ -1398,160 +2043,255 @@ const XlsxWriter = (function () {
 
   // 테스트 편의를 위해 일부 내부 기능을 전역에 노출
   window.__anomaly = { readFile, runAnalysis, XlsxWriter, ColumnAnalyzer, Zip, Values, TableWrapper };
+  window.__upload = { handleFile, handleFiles, dedupeColumns, escapeHtml, validateUploadFile };
 })();
 
 /* =====================================================================
- * 9. Info(ⓘ) 아이콘 + 툴팁 — 옵션/파라미터 설명
+ * 9. 도움말 툴팁 — 옵션/파라미터 설명 (옵션명 텍스트 hover/터치)
  *
  *  - 설명 문구는 아래 TOOLTIP_INFO 설정 객체에서만 관리한다(하드코딩 X).
  *  - key 는 해당 입력 요소의 id 와 동일하게 맞춘다(자동 매핑).
  *  - 새 옵션 추가 시: 화면에 입력 요소를 추가하고, 그 id 를 key 로 하는
  *    설명 항목만 이 객체에 추가하면 툴팁이 자동으로 동작한다.
- *    (예시로 PCA / KMeans 항목도 미리 정의해 두었다 — UI 추가 시 즉시 동작)
  *  - InfoTooltip 은 특정 화면에 종속되지 않는 공통 컴포넌트로,
- *    다른 화면에서도 InfoTooltip.createIcon(key) 로 재사용할 수 있다.
+ *    다른 화면에서도 InfoTooltip.attach(요소, key) 로 재사용할 수 있다.
  * ===================================================================== */
 const TOOLTIP_INFO = {
   /* --- ② 분석 옵션(체크박스) --- */
   opt_missing: {
     title: "결측치 탐지",
-    meaning: "값이 비어 있는 셀(NULL, 빈칸, 공백)을 찾아냅니다.",
-    when: "데이터 입력 누락이나 수집 오류를 점검할 때 사용합니다.",
-    beginner: "특별한 이유가 없으면 항상 켜두는 것을 권장합니다.",
-    caution: "결측이 많은 컬럼은 통계·머신러닝 분석의 정확도를 떨어뜨릴 수 있습니다.",
+    meaning: "값이 비어 있는 칸(NULL, 빈 문자열, 공백만 있는 값)을 찾아내는 검사입니다.",
+    purpose: "데이터가 빠짐없이 잘 입력되었는지 품질을 점검하기 위해 사용합니다.",
+    when: "데이터 입력 누락이나 수집 과정의 오류가 의심될 때 확인해 주세요.",
+    beginner: "특별한 이유가 없다면 항상 켜 두시는 것을 추천드립니다.",
+    practical: "실무에서도 데이터 품질 점검의 첫 단계로 거의 항상 사용합니다.",
+    caution: "결측이 많은 컬럼은 다른 통계·머신러닝 분석의 정확도까지 떨어뜨릴 수 있으니 먼저 정리해 주시는 것이 좋습니다.",
   },
   opt_duplicate: {
     title: "중복 데이터 탐지",
-    meaning: "모든 컬럼 값이 완전히 똑같은 행을 중복으로 찾아냅니다.",
-    when: "같은 데이터가 두 번 이상 입력되었는지 확인할 때 사용합니다.",
-    beginner: "기본으로 켜두면 안전합니다.",
-    caution: "일부 컬럼만 같은 경우는 중복으로 보지 않습니다(전체 값 일치 기준).",
+    meaning: "모든 컬럼의 값이 완전히 같은 행을 중복 데이터로 찾아냅니다.",
+    purpose: "같은 자료가 실수로 두 번 이상 입력된 경우를 걸러내기 위해 사용합니다.",
+    when: "여러 파일을 합치거나 반복 입력한 뒤 검증할 때 특히 유용합니다.",
+    beginner: "기본으로 켜 두시면 안전합니다.",
+    practical: "데이터 취합(병합) 직후 검증 단계에서 가장 많이 사용됩니다.",
+    caution: "일부 컬럼만 같은 행은 중복으로 보지 않습니다. 모든 값이 일치해야 중복으로 판정됩니다.",
   },
   opt_range: {
     title: "범위 검사",
-    meaning: "숫자 값이 사용자가 정한 허용 최소~최대 범위를 벗어나는지 검사합니다.",
-    when: "'수행률은 0~100%'처럼 값의 상식적 한계가 분명할 때 사용합니다.",
-    effect: "허용 범위를 좁히면 더 엄격하게, 넓히면 느슨하게 판정합니다.",
-    beginner: "아래 '숫자 컬럼 설정'에서 컬럼별 허용값을 지정하세요.",
-    caution: "'사용'을 체크한 컬럼만 검사합니다.",
+    meaning: "숫자 값이 직접 정하신 허용 최소~최대 범위를 벗어나는지 확인하는 검사입니다.",
+    purpose: "상식적으로 불가능한 값(예: 수행률 130%)을 찾아내기 위해 사용합니다.",
+    when: "'점수는 0~100'처럼 값이 가질 수 있는 한계가 분명할 때 효과적입니다.",
+    beginner: "아래 '숫자 컬럼 설정' 표에서 허용 범위를 입력하신 뒤 사용해 주세요.",
+    practical: "업무 규정상 한계값이 정해진 컬럼(근무시간, 비율 등)에 우선 적용합니다.",
+    caution: "허용 범위의 기본값은 실제 최소/최대값이라서, 수정하지 않으시면 아무것도 탐지되지 않습니다.",
   },
   opt_change: {
     title: "증감률 검사",
-    meaning: "바로 앞 행 대비 값이 몇 % 변했는지 계산해 급격한 변화를 찾습니다.",
-    when: "시간순으로 정렬된 데이터에서 갑작스러운 변화를 볼 때 유용합니다.",
-    caution: "행 순서가 시간 순이 아니면 의미가 약해집니다. 임계치(%)로 민감도를 조절하세요.",
+    meaning: "바로 앞 행과 비교해 값이 몇 % 변했는지 계산하여 갑작스러운 변화를 찾아냅니다.",
+    purpose: "시계열 데이터에서 급등·급락 구간을 빠르게 짚어내기 위해 사용합니다.",
+    when: "일별 매출, 센서 기록처럼 시간 순서로 정렬된 데이터에 사용해 주세요.",
+    common: "임계치는 100%(두 배 변화)를 많이 사용합니다.",
+    beginner: "임계치 100%로 시작해 보시는 것을 추천드립니다.",
+    caution: "행 순서가 시간 순이 아니라면 결과가 큰 의미를 갖기 어렵습니다.",
   },
   opt_iqr: {
     title: "IQR (사분위 범위)",
-    meaning: "사분위수(Q1~Q3) 기반으로 정상 범위를 정하고 그 밖의 값을 이상치로 봅니다.",
-    when: "데이터 분포를 몰라도 무난하게 쓸 수 있는 통계 기법입니다.",
-    recommend: "판정 배수(k)는 일반적으로 1.5를 사용합니다(본 프로그램은 1.5 고정).",
-    effect: "배수가 크면(예: 3.0) 아주 극단적인 값만 탐지합니다.",
+    meaning: "값을 크기 순으로 나열해 가운데 50% 구간(Q1~Q3)을 구하고, 그 범위에서 크게 벗어난 값을 이상치로 판단합니다.",
+    purpose: "분포 모양을 모르는 데이터에서도 안정적으로 이상치를 찾기 위해 사용합니다.",
+    when: "데이터 분포를 잘 모를 때 가장 무난하게 쓸 수 있는 통계 기법입니다.",
+    common: "판정 배수는 1.5가 표준이며, 이 프로그램도 1.5를 사용합니다.",
+    practical: "평균이 극단값에 흔들리는 것을 피하고 싶을 때 Z-Score보다 선호됩니다.",
     caution: "데이터가 4건 미만이거나 값이 거의 일정하면 자동으로 건너뜁니다.",
   },
   opt_zscore: {
     title: "Z-Score",
-    meaning: "값이 평균에서 몇 표준편차 떨어졌는지로 이상치를 판정합니다.",
-    when: "데이터가 대체로 정규분포(종 모양)에 가까울 때 효과적입니다.",
-    recommend: "임계치 3.0을 가장 많이 씁니다(아래 파라미터에서 조절).",
-    caution: "분포가 심하게 치우쳐 있으면 IQR 등 다른 기법이 더 적합합니다.",
+    meaning: "각 값이 평균에서 표준편차의 몇 배만큼 떨어져 있는지(Z값)를 계산해 이상치를 찾습니다.",
+    purpose: "평균에서 비정상적으로 멀리 떨어진 값을 통계적으로 걸러내기 위해 사용합니다.",
+    when: "데이터가 종 모양(정규분포)에 가까울 때 특히 잘 맞습니다.",
+    common: "임계치 3.0을 가장 많이 사용합니다.",
+    beginner: "기본값 3.0을 그대로 사용해 보세요.",
+    caution: "분포가 한쪽으로 심하게 치우쳐 있다면 IQR 방식이 더 적합할 수 있습니다.",
   },
   opt_iforest: {
     title: "Isolation Forest",
-    meaning: "무작위 분할 트리로 '쉽게 고립되는' 값을 이상치로 찾는 머신러닝 기법입니다.",
-    when: "여러 숫자 컬럼을 함께 고려해 복합적인 이상치를 찾을 때 사용합니다.",
-    recommend: "이상치 비율(contamination)로 민감도를 정합니다(아래 파라미터).",
-    caution: "결측이 있는 행은 계산에서 제외합니다.",
+    meaning: "데이터를 무작위로 계속 쪼개면서, 유난히 빨리 혼자 남는(고립되는) 값을 이상치로 찾는 머신러닝 기법입니다.",
+    purpose: "여러 숫자 컬럼을 동시에 고려한 복합적인 이상치를 찾기 위해 사용합니다.",
+    when: "한 컬럼만 보면 정상인데 여러 값의 조합이 이상한 경우를 찾고 싶을 때 사용해 주세요.",
+    common: "이상치 비율(contamination) 0.05(5%)를 기본으로 많이 사용합니다.",
+    practical: "컬럼이 많거나 데이터가 커도 비교적 빠르게 동작해 실무에서 널리 쓰입니다.",
+    caution: "결측이 있는 행은 계산에서 제외됩니다. 결측치를 먼저 정리하시면 더 정확해집니다.",
   },
   opt_lof: {
     title: "Local Outlier Factor (LOF)",
-    meaning: "주변 이웃보다 상대적으로 밀도가 낮은(외따로 떨어진) 점을 이상치로 봅니다.",
-    when: "지역적으로 튀는 값(부분 집단 내 이상)을 찾을 때 강점이 있습니다.",
-    recommend: "이웃 수(n_neighbors)로 민감도를 조절합니다(아래 파라미터).",
-    caution: "값의 크기 차이를 없애기 위해 내부적으로 표준화 후 계산합니다.",
+    meaning: "각 데이터가 주변 이웃들에 비해 얼마나 외따로 떨어져 있는지(밀도 차이)를 계산해 이상치를 찾습니다.",
+    purpose: "전체 기준이 아니라 '자기 주변 무리' 기준으로 튀는 값을 찾기 위해 사용합니다.",
+    when: "데이터가 여러 그룹으로 나뉘어 있고, 그룹 안에서의 이상값을 찾고 싶을 때 강점이 있습니다.",
+    common: "이웃 수(n_neighbors)는 20을 많이 사용합니다.",
+    caution: "계산량이 데이터 수의 제곱에 비례해 늘어나 2만 행을 넘는 데이터는 자동으로 건너뛰고 알려 드립니다.",
   },
   opt_dbscan: {
     title: "DBSCAN",
-    meaning: "가까운 점끼리 군집을 만들고, 어느 군집에도 속하지 못한 점(노이즈)을 이상치로 봅니다.",
-    when: "밀집된 정상 데이터 사이에서 드문드문 떨어진 값을 찾을 때 사용합니다.",
-    recommend: "eps(이웃 거리)와 min_samples(최소 군집 크기)로 동작을 조절합니다.",
-    caution: "eps 설정에 민감합니다. 표준화된 데이터 기준으로 값을 정하세요.",
+    meaning: "가까운 데이터끼리 묶어 군집을 만들고, 어느 군집에도 속하지 못한 점(노이즈)을 이상치로 판단합니다.",
+    purpose: "밀집된 정상 데이터 사이에 드문드문 떨어진 값을 찾기 위해 사용합니다.",
+    when: "정상 데이터가 몇 개의 덩어리로 모여 있는 형태일 때 사용해 주세요.",
+    common: "eps 0.5, min_samples 5 조합을 출발점으로 많이 사용합니다.",
+    caution: "eps 값에 매우 민감합니다. 값을 바꿔 가며 결과를 비교해 보시는 것이 좋습니다. 2만 행을 넘는 데이터는 자동으로 건너뛰고 알려 드립니다.",
   },
 
   /* --- 알고리즘 파라미터(수치 입력) --- */
   p_change: {
     title: "증감률 임계치 (%)",
-    meaning: "앞 행 대비 변화율이 이 값(%)을 넘으면 이상으로 판정합니다.",
-    recommend: "보통 100%를 많이 사용합니다.",
-    range: "데이터 특성에 따라 50~200% 범위에서 조절합니다.",
-    effect: "낮추면 작은 변화도 이상으로 잡고, 높이면 큰 급변만 잡습니다.",
-    beginner: "잘 모르면 100으로 시작하세요.",
+    meaning: "앞 행 대비 변화율(%)이 이 값을 넘으면 '증감률 이상'으로 판정하는 기준입니다.",
+    purpose: "시간 순 데이터에서 어느 정도의 변화까지 정상으로 볼지 정하기 위해 사용합니다.",
+    when: "급등·급락 탐지의 민감도를 조절하고 싶을 때 변경해 주세요.",
+    common: "100%(두 배 이상 변화)를 많이 사용합니다.",
+    range: "데이터 변동성에 따라 50~200% 사이를 권장드립니다.",
+    up: "값을 크게 하면 아주 급격한 변화만 탐지되어 결과가 줄어듭니다.",
+    down: "값을 작게 하면 작은 변동까지 이상으로 잡혀 결과가 많아질 수 있습니다.",
+    beginner: "100으로 시작해 보시고, 너무 많이 잡히면 150~200으로 올려 보세요.",
+    practical: "변동이 큰 월별 지표는 150~200%, 안정적인 센서 데이터는 30~50%도 사용합니다.",
+    caution: "직전 값이 0이면 증감률을 계산할 수 없어 해당 구간은 건너뜁니다.",
   },
   p_zscore: {
     title: "Z-Score 임계치",
-    meaning: "평균으로부터 몇 표준편차 이상 떨어지면 이상치로 볼지 결정합니다.",
-    recommend: "일반적으로 3.0을 가장 많이 사용합니다.",
-    range: "2.5~3.5 범위를 권장합니다.",
-    effect: "값을 낮추면 이상치를 더 많이 탐지하고, 높이면 극단적인 값만 탐지합니다.",
-    beginner: "3.0을 추천합니다.",
+    meaning: "평균에서 표준편차의 몇 배 이상 떨어진 값을 이상치로 볼지 정하는 기준입니다.",
+    purpose: "통계적으로 '충분히 드문 값'의 기준선을 정하기 위해 사용합니다.",
+    when: "이상치가 너무 많이(적게) 잡힐 때 민감도를 조절해 주세요.",
+    common: "일반적으로 3.0을 가장 많이 사용합니다.",
+    range: "2.5 ~ 3.5 사이를 권장드립니다.",
+    up: "값을 크게 하면 아주 극단적인 값만 이상치로 잡아 탐지 개수가 줄어듭니다.",
+    down: "값을 작게 하면 이상치를 더 많이 잡는 대신, 정상 데이터가 함께 잡힐 수 있습니다.",
+    beginner: "처음이시라면 기본값 3.0을 그대로 사용하시는 것을 추천드립니다.",
+    practical: "실무에서는 3.0으로 시작해 결과를 보며 2.5~3.5 사이에서 조정하는 경우가 많습니다.",
+    caution: "표본이 아주 적으면(수십 건 미만) 평균과 표준편차 자체가 불안정할 수 있습니다.",
   },
   p_contam: {
     title: "Isolation Forest contamination",
-    meaning: "전체 데이터 중 이상치가 차지할 것으로 보는 비율입니다.",
-    recommend: "보통 0.01~0.1(1~10%)을 사용합니다.",
-    range: "0.001 ~ 0.5.",
-    effect: "크게 하면 더 많은 행을, 작게 하면 소수만 이상으로 판정합니다.",
-    beginner: "사전 정보가 없으면 0.05를 권장합니다.",
-    caution: "실제 이상치 비율과 크게 다르면 오탐/미탐이 늘 수 있습니다.",
+    meaning: "전체 데이터 중 이상치가 차지할 것으로 예상하는 비율입니다. 예를 들어 0.05는 '약 5%가 이상치'라는 뜻입니다.",
+    purpose: "Isolation Forest 가 몇 개를 이상치로 골라낼지 정하기 위해 사용합니다.",
+    when: "탐지되는 이상치 개수를 늘리거나 줄이고 싶을 때 조절해 주세요.",
+    common: "0.01 ~ 0.1(1~10%) 범위를 많이 사용합니다.",
+    range: "0.001 ~ 0.5 사이에서 설정하실 수 있습니다.",
+    up: "값을 크게 하면 더 많은 행이 이상치로 분류됩니다.",
+    down: "값을 작게 하면 가장 확실한 소수만 이상치로 분류됩니다.",
+    beginner: "사전 정보가 없다면 0.05를 추천드립니다.",
+    practical: "실제 불량률·오류율을 대략 알고 계시다면 그 값에 맞추시는 것이 가장 좋습니다.",
+    caution: "실제 이상치 비율과 크게 다르게 설정하면 정상을 이상으로(또는 반대로) 판정할 수 있습니다.",
   },
   p_neighbors: {
     title: "LOF n_neighbors",
-    meaning: "각 점의 밀도를 계산할 때 참고하는 주변 이웃 개수입니다.",
-    recommend: "일반적으로 20을 권장합니다.",
-    range: "데이터가 적으면 10~20, 많으면 20~50 정도.",
-    effect: "너무 작으면 노이즈에 민감하고, 너무 크면 지역적 이상치를 놓칠 수 있습니다.",
-    caution: "전체 데이터 수보다 작아야 합니다(자동으로 상한 조정).",
+    meaning: "LOF 알고리즘이 주변 데이터를 몇 개까지 이웃으로 보고 밀도를 비교할지 정하는 값입니다.",
+    purpose: "'주변'의 범위를 정해 지역적 이상치 탐지의 기준을 잡기 위해 사용합니다.",
+    when: "지역적 이상치 탐지의 민감도를 조절하고 싶을 때 변경해 주세요.",
+    common: "일반적으로 20을 많이 사용합니다.",
+    range: "데이터가 적으면 10~20, 많으면 20~50 정도를 권장드립니다.",
+    up: "값을 크게 하면 더 넓은 범위와 비교하게 되어 전체적인 이상치 위주로 탐지합니다.",
+    down: "값을 작게 하면 좁은 범위와 비교하게 되어 노이즈에 민감해질 수 있습니다.",
+    beginner: "기본값 20을 그대로 사용해 보세요.",
+    practical: "군집 크기가 다양하다면 20~30 사이에서 몇 가지를 시도해 보고 결과를 비교합니다.",
+    caution: "전체 데이터 수보다 큰 값은 자동으로 줄여서 계산합니다.",
   },
   p_eps: {
     title: "DBSCAN eps",
-    meaning: "두 점을 '이웃'으로 인정하는 최대 거리입니다.",
-    when: "데이터를 표준화(정규화)한 기준으로 설정하는 것을 권장합니다.",
-    recommend: "표준화된 데이터에서는 0.3~1.0 부근을 흔히 사용합니다(기본 0.5).",
-    effect: "크게 하면 넓게 묶여 이상치가 줄고, 작게 하면 더 많은 점이 노이즈가 됩니다.",
-    caution: "데이터 스케일에 매우 민감합니다.",
+    meaning: "DBSCAN 에서 두 데이터를 '이웃'으로 인정하는 최대 거리입니다.",
+    purpose: "군집을 얼마나 촘촘하게 묶을지 정하기 위해 사용합니다.",
+    when: "노이즈(이상치)로 분류되는 데이터가 너무 많거나 적을 때 조절해 주세요.",
+    common: "이 프로그램은 데이터를 자동으로 표준화하므로 0.3~1.0 부근을 많이 사용합니다.",
+    range: "0.3 ~ 1.0 사이에서 시작하시는 것을 권장드립니다.",
+    up: "값을 크게 하면 멀리 있는 점까지 한 군집으로 묶여 이상치(노이즈)가 줄어듭니다.",
+    down: "값을 작게 하면 군집이 잘게 쪼개져 더 많은 점이 이상치로 분류됩니다.",
+    beginner: "기본값 0.5로 시작해 보세요.",
+    practical: "노이즈 개수를 보면서 0.3 → 0.5 → 0.8 순으로 조정해 보는 방식을 많이 사용합니다.",
+    caution: "eps 에 따라 결과가 크게 달라질 수 있으니 여러 값을 비교해 보시는 것이 좋습니다.",
   },
   p_minsamples: {
     title: "DBSCAN min_samples",
-    meaning: "하나의 군집을 이루기 위한 최소 점(샘플) 개수입니다.",
-    recommend: "일반적으로 5를 사용합니다.",
-    range: "보통 3~10.",
-    effect: "크게 하면 군집 기준이 엄격해져 노이즈(이상치)가 늘어납니다.",
-    beginner: "5로 시작하세요.",
+    meaning: "하나의 군집으로 인정받기 위해 필요한 최소 데이터(이웃) 개수입니다.",
+    purpose: "군집 형성 기준의 엄격함을 정하기 위해 사용합니다.",
+    when: "작은 무리를 군집으로 볼지, 노이즈로 볼지 기준을 바꾸고 싶을 때 조절해 주세요.",
+    common: "일반적으로 5를 사용합니다.",
+    range: "보통 3~10 사이를 권장드립니다.",
+    up: "값을 크게 하면 군집 기준이 엄격해져 이상치(노이즈)가 늘어납니다.",
+    down: "값을 작게 하면 작은 무리도 군집으로 인정되어 이상치가 줄어듭니다.",
+    beginner: "기본값 5를 그대로 사용해 보세요.",
+    practical: "숫자 컬럼 수가 많을수록 조금 더 큰 값(예: 컬럼 수 × 2)을 쓰기도 합니다.",
+    caution: "min_samples 와 eps 는 함께 움직이는 값이라, 한쪽을 바꾸면 다른 쪽 결과도 확인해 주세요.",
+  },
+
+  /* --- 두 파일 비교(이상 변동 판정 기준) --- */
+  opt_cmp_rate: {
+    title: "변화율 기준",
+    meaning: "두 파일 사이의 값 변화율(%)이 기준을 넘으면 '이상 변동'으로 표시합니다.",
+    purpose: "급격한 증가·감소를 직관적인 % 기준으로 찾기 위해 사용합니다.",
+    when: "'50% 이상 변했으면 확인해야 한다'처럼 명확한 기준이 있을 때 사용해 주세요.",
+    beginner: "가장 이해하기 쉬운 기준이므로 처음에는 이 항목만 켜 두셔도 좋습니다.",
+    caution: "이전 값이 0이면 변화율을 계산할 수 없어 '0에서 변경'으로만 표시됩니다.",
+  },
+  opt_cmp_z: {
+    title: "Z-Score 기반 변화량",
+    meaning: "매칭된 모든 행의 변화량(변화가 없던 행은 0으로 포함)과 비교해, 유난히 큰 변화를 통계적으로 찾아냅니다.",
+    purpose: "다른 행들의 변화 수준과 비교했을 때 튀는 변화를 찾기 위해 사용합니다.",
+    when: "전반적으로 값이 조금씩 변한 가운데 특정 행만 크게 변한 경우를 찾을 때 유용합니다.",
+    caution: "변경된 행이 3건 미만이면 통계 계산이 어려워 자동으로 건너뜁니다.",
+  },
+  opt_cmp_iqr: {
+    title: "IQR 기반 변화량",
+    meaning: "매칭된 모든 행의 변화량(변화 없음=0 포함)을 크기 순으로 나열해, 가운데 50% 범위에서 크게 벗어난 변화를 이상 변동으로 판단합니다.",
+    purpose: "평균이 극단값에 흔들리지 않는 방식으로 큰 변화를 찾기 위해 사용합니다.",
+    when: "변화량에 극단값이 섞여 있을 가능성이 높을 때 Z-Score 보다 안정적입니다.",
+    caution: "변경된 행이 4건 미만이면 사분위 계산이 어려워 자동으로 건너뜁니다.",
+  },
+  p_cmp_rate: {
+    title: "급변 기준 변화율 (%)",
+    meaning: "변화율(%)의 절대값이 이 값 이상이면 급격한 증가/감소(이상 변동)로 표시합니다.",
+    purpose: "어느 정도의 변화까지를 정상 범위로 볼지 정하기 위해 사용합니다.",
+    when: "이상 변동이 너무 많이(적게) 표시될 때 조절해 주세요.",
+    common: "50%를 많이 사용합니다.",
+    range: "30 ~ 200% 사이를 권장드립니다.",
+    up: "값을 크게 하면 아주 큰 변화만 이상 변동으로 표시됩니다.",
+    down: "값을 작게 하면 작은 변화도 이상 변동으로 표시됩니다.",
+    beginner: "기본값 50으로 시작해 보세요.",
+    practical: "연 단위 비교는 30~50%, 월 단위 비교는 50~100%를 자주 사용합니다.",
+    caution: "감소는 -100%보다 작아질 수 없으므로, 감소 탐지가 목적이라면 100% 미만으로 설정해 주세요.",
+  },
+  p_cmp_z: {
+    title: "변화량 Z-Score 임계치",
+    meaning: "컬럼별 변화량 분포에서 표준편차의 몇 배 이상 벗어난 변화를 이상 변동으로 볼지 정합니다.",
+    purpose: "상대적으로 유난히 큰 변화를 걸러내는 기준을 정하기 위해 사용합니다.",
+    common: "3.0을 가장 많이 사용합니다.",
+    range: "2.5 ~ 3.5 사이를 권장드립니다.",
+    up: "값을 크게 하면 극단적인 변화만 표시됩니다.",
+    down: "값을 작게 하면 더 많은 변화가 이상 변동으로 표시됩니다.",
+    beginner: "기본값 3.0을 그대로 사용해 보세요.",
+    caution: "변경 건수가 적으면 통계가 불안정해질 수 있습니다.",
   },
 
   /* --- 향후 확장 예시(현재 UI 미노출, 입력 요소 추가 시 자동 동작) --- */
   p_pca_components: {
     title: "PCA Components",
     meaning: "차원 축소 시 유지할 주성분(축)의 개수입니다.",
-    recommend: "설명분산비가 90~95% 이상이 되도록 선택하는 것을 권장합니다.",
+    common: "설명분산비가 90~95% 이상이 되도록 선택하시는 것을 권장드립니다.",
   },
   p_kmeans_k: {
     title: "KMeans Cluster 수 (k)",
     meaning: "생성할 군집(그룹)의 개수입니다.",
-    recommend: "Elbow Method 또는 Silhouette Score를 참고하여 결정합니다.",
+    common: "Elbow Method 또는 Silhouette Score 를 참고해 결정하시는 것을 권장드립니다.",
   },
 };
 
 const InfoTooltip = (function () {
   // 표시 순서와 라벨 정의(설정 객체에 존재하는 필드만 렌더링)
   const FIELDS = [
-    ["meaning", "의미"], ["when", "사용 시점"], ["effect", "값의 영향"],
-    ["recommend", "권장값"], ["range", "권장 범위"], ["beginner", "초보자 추천"],
-    ["caution", "주의사항"],
+    ["meaning", "의미"], ["purpose", "사용 목적"], ["when", "사용 시점"],
+    ["common", "권장값"], ["range", "권장 범위"],
+    ["up", "크게 하면"], ["down", "작게 하면"],
+    ["beginner", "초보자 추천"], ["practical", "실무 권장"], ["caution", "주의사항"],
   ];
   let tip = null, mode = null, anchor = null, timer = null;
+  // 터치 전용 기기(hover 불가) 판별 — 클릭 시점에 평가한다.
+  const isTouchOnly = () => window.matchMedia && window.matchMedia("(hover: none)").matches;
 
-  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
   function ensure() {
     if (tip) return tip;
@@ -1596,47 +2336,618 @@ const InfoTooltip = (function () {
   }
   function scheduleHide() { clearTimeout(timer); timer = setTimeout(hide, 140); }
 
-  /** key 에 매핑된 ⓘ 아이콘 버튼을 생성한다(재사용 가능). */
-  function createIcon(key) {
+  /** 요소를 툴팁 대상으로 만든다(hover/키보드 focus/모바일 터치). 재사용 가능. */
+  function attach(el, key) {
     const info = TOOLTIP_INFO[key];
-    const b = document.createElement("button");
-    b.type = "button"; b.className = "info-icon"; b.textContent = "i";
-    b.setAttribute("aria-label", (info ? info.title : key) + " 설명");
-    // PC: hover / 키보드: focus
-    b.addEventListener("mouseenter", () => { if (mode !== "pinned") show(b, key, "hover"); });
-    b.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
-    b.addEventListener("focus", () => { if (mode !== "pinned") show(b, key, "hover"); });
-    b.addEventListener("blur", () => { if (mode === "hover") hide(); });
-    // 모바일/터치: click 으로 고정 토글
-    b.addEventListener("click", (e) => {
+    el.classList.add("has-tooltip");
+    el.setAttribute("tabindex", "0");
+    el.setAttribute("aria-label", (info ? info.title : key) + " 도움말");
+    el.addEventListener("mouseenter", () => { if (mode !== "pinned") show(el, key, "hover"); });
+    el.addEventListener("mouseleave", () => { if (mode === "hover") scheduleHide(); });
+    el.addEventListener("focus", () => { if (mode !== "pinned") show(el, key, "hover"); });
+    el.addEventListener("blur", () => { if (mode === "hover") hide(); });
+    // 모바일(터치 전용 기기): 탭하면 툴팁을 고정 토글한다.
+    // PC 에서는 hover 로 이미 표시되므로 클릭의 원래 동작(체크박스 토글 등)을 방해하지 않는다.
+    el.addEventListener("click", (e) => {
+      if (!isTouchOnly()) return;
       e.preventDefault(); e.stopPropagation();
-      if (mode === "pinned" && anchor === b) hide();
-      else show(b, key, "pinned");
+      if (mode === "pinned" && anchor === el) hide();
+      else show(el, key, "pinned");
     });
-    return b;
   }
 
-  /** 화면 내 옵션/파라미터 요소를 찾아 아이콘을 자동 부착한다. */
+  /** 화면 내 옵션/파라미터 요소를 찾아 옵션명 텍스트에 툴팁을 자동 연결한다. */
   function init() {
-    document.querySelectorAll(".grid-opts label, .param").forEach((c) => {
-      const input = c.querySelector("input");
+    // 체크박스 옵션: 라벨의 텍스트 부분만 span 으로 감싸 툴팁 대상으로 만든다.
+    document.querySelectorAll(".grid-opts label").forEach((label) => {
+      const input = label.querySelector("input");
       if (!input || !TOOLTIP_INFO[input.id]) return;
-      const target = c.classList.contains("param") ? c.querySelector("label") : c;
-      target.appendChild(createIcon(input.id));
+      const span = document.createElement("span");
+      const nodes = [];
+      for (let n = input.nextSibling; n; n = n.nextSibling) nodes.push(n);
+      nodes.forEach((nd) => span.appendChild(nd));
+      span.textContent = span.textContent.trim();
+      label.appendChild(span);
+      attach(span, input.id);
+    });
+    // 수치 파라미터: 라벨 텍스트 자체를 툴팁 대상으로 만든다.
+    document.querySelectorAll(".param").forEach((p) => {
+      const input = p.querySelector("input");
+      const label = p.querySelector("label");
+      if (!input || !label || !TOOLTIP_INFO[input.id]) return;
+      attach(label, input.id);
     });
     // 바깥 클릭/ESC 로 닫기(고정된 툴팁 포함)
     document.addEventListener("click", (e) => {
-      if (mode === "pinned" && !e.target.closest(".info-icon") && !e.target.closest(".info-tooltip")) hide();
+      if (mode === "pinned" && !e.target.closest(".has-tooltip") && !e.target.closest(".info-tooltip")) hide();
     });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") hide(); });
     window.addEventListener("resize", hide);
     window.addEventListener("scroll", () => { if (anchor) place(anchor); }, true);
   }
-  return { init, createIcon };
+  return { init, attach };
 })();
 
 InfoTooltip.init();
 window.__infoTooltip = InfoTooltip;
+
+/* =====================================================================
+ * 10. 두 파일 비교 검증
+ *
+ *  - 파일 A(기준/이전)와 파일 B(비교/이후)를 기준 컬럼으로 행 매칭한다.
+ *  - 기준 컬럼은 이름 유사도 + 고유값 비율 + 값 겹침 비율로 자동 추론하고,
+ *    사용자가 직접 변경할 수도 있다.
+ *  - 추가/삭제/변경/동일, 수치 변화(절대량·증감률·급증/급감),
+ *    이상 변동(변화율/Z-Score/IQR), 결측값 변경, 타입 변경을 판정한다.
+ * ===================================================================== */
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = window.__upload.escapeHtml;
+  const dedupe = window.__upload.dedupeColumns;
+  const fmt = Values.fmtNum;
+
+  const PREVIEW_LIMIT = 300;
+
+  // 슬롯 상태: {name, table} 또는 null
+  const slots = { A: null, B: null };
+  let busy = false;
+  let lastCompare = null; // {records, summary, notes}
+
+  /* ---------- 모드 탭 ---------- */
+  function switchMode(mode) {
+    const single = mode === "single";
+    $("viewSingle").classList.toggle("hidden", !single);
+    $("viewCompare").classList.toggle("hidden", single);
+    $("tabSingle").classList.toggle("active", single);
+    $("tabCompare").classList.toggle("active", !single);
+    $("tabSingle").setAttribute("aria-selected", String(single));
+    $("tabCompare").setAttribute("aria-selected", String(!single));
+  }
+  $("tabSingle").addEventListener("click", () => switchMode("single"));
+  $("tabCompare").addEventListener("click", () => switchMode("compare"));
+
+  /* ---------- 파일 슬롯(A/B) 업로드 ---------- */
+  function setCmpError(msg) {
+    const el = $("cmpFileError");
+    if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = "⚠ " + msg; el.classList.remove("hidden");
+  }
+  function setCmpStatus(msg) { $("cmpStatus").textContent = msg; }
+  function setCmpProgress(pct) { $("cmpProgress").style.width = pct + "%"; }
+
+  /** 슬롯 문구를 기본/파일명으로 전환한다. */
+  function renderSlot(key) {
+    const loaded = slots[key];
+    const text = $("dz" + key + "Text"), sub = $("dz" + key + "Sub"), clear = $("dz" + key + "Clear");
+    if (loaded) {
+      text.textContent = loaded.name; text.classList.add("dz-file");
+      sub.textContent = "행 " + loaded.table.rows.length + " × 열 " + loaded.table.columns.length +
+        " · 다른 파일을 올리시면 교체됩니다.";
+      clear.classList.remove("hidden");
+    } else {
+      text.textContent = "파일 " + key + "를 여기에 드래그하거나 클릭하여 업로드";
+      text.classList.remove("dz-file");
+      sub.textContent = (key === "A" ? "기준(이전) 데이터" : "비교(이후) 데이터") + " · CSV / XLSX";
+      clear.classList.add("hidden");
+    }
+  }
+
+  /** 검증 + 읽기 — 단일 분석과 동일한 공통 검증 규칙(validateUploadFile)을 재사용한다. */
+  async function loadForCompare(file) {
+    await window.__upload.validateUploadFile(file);
+    const raw = await readFile(file);
+    return { columns: dedupe(raw.columns), rows: raw.rows };
+  }
+
+  async function handleSlotFile(key, file) {
+    if (!file) return;
+    if (busy) { setCmpError("이미 다른 파일을 처리하고 있습니다. 잠시 후 다시 시도해 주세요."); return; }
+    setCmpError(""); busy = true;
+    $("dz" + key).classList.add("busy");
+    setCmpStatus("파일 " + key + "를 읽고 있습니다...");
+    try {
+      await new Promise((r) => setTimeout(r, 0));
+      const t = await loadForCompare(file);
+      slots[key] = { name: file.name, table: t };
+      renderSlot(key);
+      $("cmpResultPanel").classList.add("hidden"); lastCompare = null;
+      afterSlotsChanged();
+    } catch (err) {
+      console.error(err);
+      setCmpError("파일 " + key + "를 읽지 못했습니다: " + (err && err.message ? err.message : err));
+      slots[key] = null; renderSlot(key); afterSlotsChanged();
+    } finally {
+      busy = false; $("dz" + key).classList.remove("busy");
+    }
+  }
+
+  function setupSlot(key) {
+    const dz = $("dz" + key), input = $("file" + key), clear = $("dz" + key + "Clear");
+    let depth = 0;
+    dz.addEventListener("dragenter", (e) => { e.preventDefault(); depth++; dz.classList.add("dragover"); });
+    dz.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = busy ? "none" : "copy"; });
+    dz.addEventListener("dragleave", () => { depth--; if (depth <= 0) { depth = 0; dz.classList.remove("dragover"); } });
+    dz.addEventListener("drop", (e) => {
+      e.preventDefault(); depth = 0; dz.classList.remove("dragover");
+      const dt = e.dataTransfer;
+      if (dt && dt.files && dt.files.length) handleSlotFile(key, dt.files[0]);
+      else setCmpError("드롭하신 항목에서 파일을 찾지 못했습니다. 파일을 드래그하셨는지 확인해 주세요.");
+    });
+    dz.addEventListener("click", (e) => { if (e.target === clear) return; if (!busy) input.click(); });
+    dz.addEventListener("keydown", (e) => {
+      if (e.target !== dz) return;
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!busy) input.click(); }
+    });
+    input.addEventListener("change", (e) => { handleSlotFile(key, e.target.files[0]); e.target.value = ""; });
+    clear.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (busy) return;
+      slots[key] = null; renderSlot(key);
+      $("cmpResultPanel").classList.add("hidden"); lastCompare = null;
+      setCmpError(""); afterSlotsChanged();
+    });
+  }
+  setupSlot("A"); setupSlot("B");
+
+  /* ---------- 기준 컬럼 자동 추론 ---------- */
+  // 같은 역할로 자주 쓰이는 컬럼명 그룹(이름이 달라도 후보로 인정)
+  const KEY_SYNONYMS = [
+    ["산단명", "산업단지명", "단지명"],
+    ["공장명", "업체명", "회사명", "기업명", "상호"],
+    ["코드", "code", "cd"],
+    ["id", "아이디", "식별자"],
+    ["관리번호", "관리코드"],
+    ["사업자번호", "사업자등록번호"],
+    ["이름", "성명", "name"],
+    ["번호", "no", "num"],
+  ];
+  const norm = (s) => String(s).toLowerCase().replace(/[\s_\-()\[\]./]/g, "");
+
+  /** 두 컬럼명이 같은 대상을 가리킬 가능성(0~1). */
+  function nameScore(a, b) {
+    const na = norm(a), nb = norm(b);
+    if (!na || !nb) return 0;
+    if (na === nb) return 1.0;
+    if (na.length >= 2 && nb.length >= 2 && (na.includes(nb) || nb.includes(na))) return 0.85;
+    for (const g of KEY_SYNONYMS) {
+      const gn = g.map(norm);
+      if (gn.some((x) => na.includes(x)) && gn.some((x) => nb.includes(x))) return 0.75;
+    }
+    // 문자 구성 유사도(간단 비교)
+    const sa = new Set(na), sb = new Set(nb);
+    let common = 0; for (const ch of sa) if (sb.has(ch)) common++;
+    return 0.3 * common / Math.max(sa.size, sb.size, 1);
+  }
+
+  /** 컬럼 프로필: 고유값 집합/고유 비율(상위 3000행 표본). */
+  function colProfile(table, idx) {
+    const seen = new Set(); let count = 0;
+    const n = Math.min(table.rows.length, 3000);
+    for (let r = 0; r < n; r++) {
+      const t = Values.cellText(table.rows[r][idx]).trim();
+      if (t !== "") { count++; seen.add(t); }
+    }
+    return { values: seen, count, uniq: count ? seen.size / count : 0 };
+  }
+
+  /** 기준 컬럼 쌍 자동 추론. 확신이 낮으면 null. */
+  function inferKeys(tA, tB) {
+    const profA = tA.columns.map((c, i) => colProfile(tA, i));
+    const profB = tB.columns.map((c, i) => colProfile(tB, i));
+    let best = null;
+    for (let i = 0; i < tA.columns.length; i++) {
+      for (let j = 0; j < tB.columns.length; j++) {
+        const pa = profA[i], pb = profB[j];
+        if (!pa.count || !pb.count) continue;
+        let inter = 0;
+        const small = pa.values.size <= pb.values.size ? pa.values : pb.values;
+        const big = small === pa.values ? pb.values : pa.values;
+        for (const v of small) if (big.has(v)) inter++;
+        const overlap = inter / Math.max(1, Math.min(pa.values.size, pb.values.size));
+        const score = 0.45 * nameScore(tA.columns[i], tB.columns[j])
+          + 0.25 * Math.min(pa.uniq, pb.uniq) + 0.30 * overlap;
+        if (!best || score > best.score) best = { i, j, score };
+      }
+    }
+    return best && best.score >= 0.45 ? best : null;
+  }
+
+  function fillSelect(sel, columns, selectedIdx) {
+    sel.innerHTML = "";
+    columns.forEach((c, i) => {
+      const op = document.createElement("option");
+      op.value = String(i); op.textContent = c;
+      if (i === selectedIdx) op.selected = true;
+      sel.appendChild(op);
+    });
+    sel.disabled = false;
+  }
+
+  /** 두 슬롯 상태가 바뀔 때: 키 후보 갱신 + 버튼 활성화. */
+  function afterSlotsChanged() {
+    const ready = slots.A && slots.B;
+    $("btnCompare").disabled = !ready;
+    if (!ready) {
+      $("keyA").innerHTML = ""; $("keyB").innerHTML = "";
+      $("keyA").disabled = true; $("keyB").disabled = true;
+      $("keyHint").textContent = "";
+      setCmpStatus("파일 A와 B를 모두 올려 주시면 비교를 시작할 수 있습니다.");
+      setCmpProgress(0);
+      return;
+    }
+    const hit = inferKeys(slots.A.table, slots.B.table);
+    fillSelect($("keyA"), slots.A.table.columns, hit ? hit.i : 0);
+    fillSelect($("keyB"), slots.B.table.columns, hit ? hit.j : 0);
+    if (hit) {
+      $("keyHint").textContent = "자동 추천: A의 '" + slots.A.table.columns[hit.i] +
+        "' ↔ B의 '" + slots.B.table.columns[hit.j] + "' 컬럼이 기준으로 가장 적합해 보입니다. 다른 컬럼으로 바꾸실 수도 있습니다.";
+    } else {
+      $("keyHint").textContent = "기준 컬럼을 자동으로 찾지 못했습니다. 두 파일에서 같은 대상을 가리키는 컬럼을 직접 선택해 주세요.";
+    }
+    setCmpStatus("기준 컬럼을 확인하신 뒤 [비교 시작] 버튼을 눌러 주세요.");
+  }
+
+  /* ---------- 비교 핵심 로직 ---------- */
+  /** 키 값 -> 행 위치 배열 (빈 키는 제외하고 개수만 센다). */
+  function groupByKey(table, keyIdx) {
+    const groups = new Map(); let emptyKey = 0;
+    for (let r = 0; r < table.rows.length; r++) {
+      const k = Values.cellText(table.rows[r][keyIdx]).trim();
+      if (k === "") { emptyKey++; continue; }
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    return { groups, emptyKey };
+  }
+
+  /** 비교용 텍스트 정규화(공백 정리 + 불리언 표기 통일). */
+  function normText(v) {
+    const t = Values.cellText(v).trim();
+    return /^(true|false)$/i.test(t) ? t.toLowerCase() : t;
+  }
+
+  /** A/B 두 테이블을 비교해 레코드 목록과 요약을 만든다. */
+  function compareTables(tA, tB, kaIdx, kbIdx, opts) {
+    // 1) 컬럼 매핑(키 컬럼은 강제 매핑, 나머지는 이름 유사도 0.75 이상)
+    const mapAB = new Map([[kaIdx, kbIdx]]);
+    const usedB = new Set([kbIdx]);
+    tA.columns.forEach((ca, i) => {
+      if (i === kaIdx) return;
+      let bestJ = -1, bestS = 0;
+      tB.columns.forEach((cb, j) => {
+        if (usedB.has(j) || j === kbIdx) return;
+        const s = nameScore(ca, cb);
+        if (s > bestS) { bestS = s; bestJ = j; }
+      });
+      if (bestJ >= 0 && bestS >= 0.75) { mapAB.set(i, bestJ); usedB.add(bestJ); }
+    });
+    const onlyA = tA.columns.filter((c, i) => !mapAB.has(i));
+    const onlyB = tB.columns.filter((c, j) => !usedB.has(j));
+
+    // 2) 키 그룹화 및 행 매칭(중복 키는 등장 순서대로 짝지음)
+    const ga = groupByKey(tA, kaIdx), gb = groupByKey(tB, kbIdx);
+    let dupKeys = 0;
+    const records = [];
+    // 추가/삭제 행의 내용 스냅샷(결과 표/다운로드에서 무엇이 바뀌었는지 보여 주기 위함)
+    const SNAP_MAX = 12;
+    const snap = (t, ri) => {
+      const parts = t.columns.slice(0, SNAP_MAX).map((c, i) => [c, Values.cellText(t.rows[ri][i])]);
+      if (t.columns.length > SNAP_MAX) parts.push(["…", "외 " + (t.columns.length - SNAP_MAX) + "개 컬럼"]);
+      return parts;
+    };
+    // 컬럼별 '변화 없음(0)' 수치 쌍 개수 — 이상 변동 통계의 모수에 포함한다.
+    const zeroByCol = new Map();
+    for (const [key, arrA] of ga.groups) {
+      const arrB = gb.groups.get(key) || [];
+      if (arrA.length > 1 || arrB.length > 1) dupKeys++;
+      const m = Math.min(arrA.length, arrB.length);
+      for (let k = 0; k < m; k++) records.push(compareRow(tA, tB, mapAB, key, arrA[k], arrB[k], zeroByCol));
+      for (let k = m; k < arrA.length; k++) records.push({ status: "삭제", key, tags: [], cells: [], snapshot: snap(tA, arrA[k]) });
+      for (let k = m; k < arrB.length; k++) records.push({ status: "추가", key, tags: [], cells: [], snapshot: snap(tB, arrB[k]) });
+    }
+    for (const [key, arrB] of gb.groups) {
+      if (ga.groups.has(key)) continue;
+      if (arrB.length > 1) dupKeys++;
+      for (let k = 0; k < arrB.length; k++) records.push({ status: "추가", key, tags: [], cells: [], snapshot: snap(tB, arrB[k]) });
+    }
+
+    // 3) 이상 변동 판정(수치 변화 셀 대상, 변화 없음 0 도 모수에 포함)
+    applyAnomalyRules(records, opts, zeroByCol);
+    for (const rec of records) {
+      if (rec.cells.some((c) => c.anom && c.anom.length)) rec.tags.push("이상 변동");
+    }
+
+    // 4) 요약
+    const count = (st) => records.filter((r) => r.status === st).length;
+    const cellCount = (type) => records.reduce((s, r) => s + r.cells.filter((c) => c.type === type).length, 0);
+    const summary = {
+      total: records.length,
+      same: count("동일"), changed: count("변경"),
+      added: count("추가"), removed: count("삭제"),
+      anomalyRows: records.filter((r) => r.tags.includes("이상 변동")).length,
+      missingCells: cellCount("missing"), typeCells: cellCount("type"),
+    };
+    const notes = [];
+    if (onlyA.length) notes.push("A에만 있는 컬럼(비교 제외): " + onlyA.join(", "));
+    if (onlyB.length) notes.push("B에만 있는 컬럼(비교 제외): " + onlyB.join(", "));
+    if (ga.emptyKey || gb.emptyKey) notes.push("기준값이 비어 있어 비교에서 제외된 행: A " + ga.emptyKey + "건, B " + gb.emptyKey + "건");
+    if (dupKeys) notes.push("같은 기준값이 여러 번 나타나는 키 " + dupKeys + "건은 등장 순서대로 짝지어 비교했습니다.");
+    return { records, summary, notes };
+  }
+
+  /** 매칭된 두 행의 셀 단위 비교. 동일한 수치 쌍은 zeroByCol 에 집계한다. */
+  function compareRow(tA, tB, mapAB, key, ai, bi, zeroByCol) {
+    const cells = []; const tags = [];
+    for (const [i, j] of mapAB) {
+      const col = tA.columns[i];
+      const va = tA.rows[ai][i], vb = tB.rows[bi][j];
+      const misA = Values.isMissing(va), misB = Values.isMissing(vb);
+      if (misA && misB) continue;
+      if (misA !== misB) {
+        // 결측 <-> 값 전환
+        cells.push({ col, type: "missing", a: va, b: vb });
+        if (!tags.includes("결측값 변경")) tags.push("결측값 변경");
+        continue;
+      }
+      const na = Values.toNumber(va), nb = Values.toNumber(vb);
+      if (na !== null && nb !== null) {
+        if (Math.abs(na - nb) <= 1e-9 * Math.max(1, Math.abs(na), Math.abs(nb))) {
+          if (zeroByCol) zeroByCol.set(col, (zeroByCol.get(col) || 0) + 1);
+          continue;
+        }
+        const delta = nb - na;
+        const pct = na !== 0 ? (delta / Math.abs(na)) * 100 : null;
+        cells.push({ col, type: "number", a: na, b: nb, delta, pct, anom: [] });
+      } else if ((na !== null) !== (nb !== null)) {
+        // 숫자 <-> 문자 타입 전환
+        cells.push({ col, type: "type", a: va, b: vb });
+        if (!tags.includes("타입 변경")) tags.push("타입 변경");
+      } else {
+        if (normText(va) === normText(vb)) continue;
+        const da = Values.toDate(va), db = Values.toDate(vb);
+        if ((da !== null) !== (db !== null)) {
+          cells.push({ col, type: "type", a: va, b: vb });
+          if (!tags.includes("타입 변경")) tags.push("타입 변경");
+        } else {
+          cells.push({ col, type: "text", a: va, b: vb });
+        }
+      }
+    }
+    return { status: cells.length ? "변경" : "동일", key, tags, cells };
+  }
+
+  /** 이상 변동 규칙(변화율/Z-Score/IQR)을 수치 변화 셀에 적용한다.
+   *  통계 모수에는 '변화가 없던 행(변화량 0)' 도 포함하여
+   *  "전체 행 대비 유난히 큰 변화" 라는 정의에 맞게 계산한다. */
+  function applyAnomalyRules(records, opts, zeroByCol) {
+    // 컬럼별 변화 셀 수집
+    const byCol = new Map();
+    for (const rec of records)
+      for (const c of rec.cells)
+        if (c.type === "number") {
+          if (!byCol.has(c.col)) byCol.set(c.col, []);
+          byCol.get(c.col).push(c);
+        }
+    const quantile = (sorted, p) => {
+      const pos = (sorted.length - 1) * p, lo = Math.floor(pos), hi = Math.ceil(pos);
+      return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+    };
+    for (const [col, cells] of byCol) {
+      const zeros = (zeroByCol && zeroByCol.get(col)) || 0;
+      const poolSize = cells.length + zeros;
+      // ① 변화율 기준(급격한 증가/감소)
+      if (opts.useRate) {
+        for (const c of cells) {
+          if (c.pct === null) { c.anom.push("0에서 변경"); continue; }
+          if (Math.abs(c.pct) >= opts.ratePct)
+            c.anom.push(c.pct >= 0 ? "급격한 증가" : "급격한 감소");
+        }
+      }
+      // ② Z-Score 기반 변화량(모수: 변화 셀 + 변화량 0)
+      if (opts.useZ && poolSize >= 3) {
+        let sum = 0;
+        for (const c of cells) sum += c.delta;
+        const mean = sum / poolSize; // 0 들은 합에 기여하지 않음
+        let sq = zeros * mean * mean;
+        for (const c of cells) sq += (c.delta - mean) * (c.delta - mean);
+        const std = Math.sqrt(sq / poolSize);
+        if (std > 0)
+          for (const c of cells) {
+            const z = Math.abs((c.delta - mean) / std);
+            if (z > opts.zTh) c.anom.push("변화량 Z=" + fmt(Math.round(z * 100) / 100));
+          }
+      }
+      // ③ IQR 기반 변화량(모수: 변화 셀 + 변화량 0)
+      if (opts.useIqr && poolSize >= 4) {
+        let sorted = cells.map((c) => c.delta).concat(new Array(zeros).fill(0)).sort((a, b) => a - b);
+        let q1 = quantile(sorted, 0.25), q3 = quantile(sorted, 0.75), iqr = q3 - q1;
+        if (iqr === 0 && cells.length >= 4) {
+          // 대부분 변화가 없어 IQR 이 0 이면, 변화가 있었던 셀만으로 다시 계산(퇴화 방지)
+          sorted = cells.map((c) => c.delta).sort((a, b) => a - b);
+          q1 = quantile(sorted, 0.25); q3 = quantile(sorted, 0.75); iqr = q3 - q1;
+        }
+        if (iqr > 0) {
+          const lower = q1 - 1.5 * iqr, upper = q3 + 1.5 * iqr;
+          for (const c of cells)
+            if (c.delta < lower || c.delta > upper) c.anom.push("변화량 IQR 이상");
+        }
+      }
+    }
+  }
+
+  /* ---------- 실행/렌더 ---------- */
+  $("btnCompare").addEventListener("click", async () => {
+    if (!slots.A || !slots.B) return;
+    const kaIdx = parseInt($("keyA").value, 10), kbIdx = parseInt($("keyB").value, 10);
+    if (isNaN(kaIdx) || isNaN(kbIdx)) { setCmpError("기준 컬럼을 선택해 주세요."); return; }
+    const opts = {
+      useRate: $("opt_cmp_rate").checked,
+      useZ: $("opt_cmp_z").checked,
+      useIqr: $("opt_cmp_iqr").checked,
+      ratePct: parseFloat($("p_cmp_rate").value) || 50,
+      zTh: parseFloat($("p_cmp_z").value) || 3,
+    };
+    $("btnCompare").disabled = true; setCmpError("");
+    try {
+      setCmpProgress(20); setCmpStatus("두 파일의 행을 비교하고 있습니다...");
+      await new Promise((r) => setTimeout(r, 0));
+      lastCompare = compareTables(slots.A.table, slots.B.table, kaIdx, kbIdx, opts);
+      setCmpProgress(90); setCmpStatus("결과를 정리하고 있습니다...");
+      await new Promise((r) => setTimeout(r, 0));
+      renderCompare(lastCompare);
+      setCmpProgress(100);
+      setCmpStatus("비교가 완료되었습니다. 전체 " + lastCompare.summary.total + "행 중 변경 "
+        + lastCompare.summary.changed + " · 추가 " + lastCompare.summary.added
+        + " · 삭제 " + lastCompare.summary.removed + "건입니다.");
+      $("cmpResultPanel").classList.remove("hidden");
+    } catch (err) {
+      console.error(err);
+      setCmpError("비교 중 문제가 발생했습니다: " + (err && err.message ? err.message : err));
+      setCmpStatus("비교에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      $("btnCompare").disabled = false;
+    }
+  });
+
+  const STATUS_BADGE = { "추가": "b-add", "삭제": "b-del", "변경": "b-chg", "동일": "b-same" };
+  const STATUS_ROW = { "추가": "st-add", "삭제": "st-del", "변경": "st-chg", "동일": "" };
+
+  function cellChipHtml(c) {
+    if (c.type === "number") {
+      let extra = c.pct === null ? "0에서 변경" : (c.pct >= 0 ? "+" : "-") + fmt(Math.round(Math.abs(c.pct) * 100) / 100) + "%";
+      let cls = "chg";
+      if (c.anom && c.anom.length) { cls += " anom"; extra += " · " + c.anom.join(", "); }
+      return '<span class="' + cls + '">' + esc(c.col) + ": " + fmt(c.a) + " → " + fmt(c.b) +
+        " (" + esc(extra) + ")</span>";
+    }
+    if (c.type === "missing") {
+      const from = Values.isMissing(c.a) ? "(결측)" : Values.cellText(c.a);
+      const to = Values.isMissing(c.b) ? "(결측)" : Values.cellText(c.b);
+      return '<span class="chg miss">' + esc(c.col) + ": " + esc(from) + " → " + esc(to) + "</span>";
+    }
+    if (c.type === "type") {
+      return '<span class="chg type">' + esc(c.col) + ": " + esc(Values.cellText(c.a)) + " → " +
+        esc(Values.cellText(c.b)) + " (타입 변경)</span>";
+    }
+    return '<span class="chg">' + esc(c.col) + ": " + esc(Values.cellText(c.a)) + " → " +
+      esc(Values.cellText(c.b)) + "</span>";
+  }
+
+  function renderCompare(result) {
+    const s = result.summary;
+    $("cmpSummary").innerHTML =
+      '<div class="stat"><b>' + s.total + "</b>총 비교 행</div>" +
+      '<div class="stat"><b style="color:#8a97a5">' + s.same + "</b>동일</div>" +
+      '<div class="stat"><b style="color:#b98a00">' + s.changed + "</b>변경</div>" +
+      '<div class="stat"><b style="color:#2e7d32">' + s.added + "</b>추가</div>" +
+      '<div class="stat"><b style="color:#c62828">' + s.removed + "</b>삭제</div>" +
+      '<div class="stat"><b style="color:#b23c17">' + s.anomalyRows + "</b>이상 변동 행</div>" +
+      '<div class="stat"><b>' + s.missingCells + "</b>결측값 변경(셀)</div>" +
+      '<div class="stat"><b>' + s.typeCells + "</b>타입 변경(셀)</div>";
+    $("cmpNotes").innerHTML = result.notes.map((n) => "· " + esc(n)).join("<br>");
+    renderCompareTable(result);
+  }
+
+  function renderCompareTable(result) {
+    const filter = $("cmpFilter").value;
+    const thead = $("cmpTable").querySelector("thead");
+    const tbody = $("cmpTable").querySelector("tbody");
+    thead.innerHTML = "<tr><th>상태</th><th>기준값</th><th>변경 내용</th><th>태그</th></tr>";
+    let html = "", shown = 0, matched = 0;
+    for (const rec of result.records) {
+      if (filter === "diff" && rec.status === "동일") continue;
+      if (filter === "anomaly" && !rec.tags.includes("이상 변동")) continue;
+      if (["변경", "추가", "삭제"].includes(filter) && rec.status !== filter) continue;
+      matched++;
+      if (shown >= PREVIEW_LIMIT) continue;
+      shown++;
+      let chips = rec.cells.map(cellChipHtml).join(" ");
+      if (!chips && rec.snapshot)
+        chips = rec.snapshot.map(([c, v]) => '<span class="chg miss">' + esc(c) + ": " + esc(v) + "</span>").join(" ");
+      const tagHtml = rec.tags.map((t) =>
+        t === "이상 변동" ? '<span class="tag-anom">⚠ ' + esc(t) + "</span>" : esc(t)).join(", ");
+      html += '<tr class="' + STATUS_ROW[rec.status] + '">' +
+        '<td><span class="st-badge ' + STATUS_BADGE[rec.status] + '">' + rec.status + "</span></td>" +
+        "<td>" + esc(rec.key) + "</td>" +
+        "<td>" + (chips || '<span class="muted">-</span>') + "</td>" +
+        "<td>" + (tagHtml || '<span class="muted">-</span>') + "</td></tr>";
+    }
+    tbody.innerHTML = html || '<tr><td colspan="4" class="muted">표시할 행이 없습니다.</td></tr>';
+    $("cmpNote").textContent = "표시: " + shown + " / " + matched + " 행" +
+      (matched > PREVIEW_LIMIT ? " (상위 " + PREVIEW_LIMIT + "행까지만 미리보기로 보여 드립니다)" : "");
+  }
+  $("cmpFilter").addEventListener("change", () => { if (lastCompare) renderCompareTable(lastCompare); });
+
+  /** 셀 변경 내용을 다운로드용 텍스트로 변환한다(화면 칩과 동일한 정보). */
+  function cellChangeText(c) {
+    if (c.type === "number") {
+      let extra = c.pct === null ? "0에서 변경" : (c.pct >= 0 ? "+" : "-") + fmt(Math.round(Math.abs(c.pct) * 100) / 100) + "%";
+      if (c.anom && c.anom.length) extra += " · " + c.anom.join(", ");
+      return c.col + ": " + fmt(c.a) + " → " + fmt(c.b) + " (" + extra + ")";
+    }
+    if (c.type === "missing") {
+      const from = Values.isMissing(c.a) ? "(결측)" : Values.cellText(c.a);
+      const to = Values.isMissing(c.b) ? "(결측)" : Values.cellText(c.b);
+      return c.col + ": " + from + " → " + to + " (결측값 변경)";
+    }
+    if (c.type === "type")
+      return c.col + ": " + Values.cellText(c.a) + " → " + Values.cellText(c.b) + " (타입 변경)";
+    return c.col + ": " + Values.cellText(c.a) + " → " + Values.cellText(c.b);
+  }
+
+  // 비교 결과를 Excel 로 저장(Compare 시트: 상태별 색상, Summary 시트: 요약)
+  $("btnCmpDownload").addEventListener("click", () => {
+    if (!lastCompare) return;
+    const SLOT = { "변경": 1, "추가": 2, "삭제": 3, "동일": 0 };
+    const cols = ["상태", "기준값", "변경 내용", "태그"];
+    const rows = [], slots = [];
+    for (const rec of lastCompare.records) {
+      let detail = rec.cells.map(cellChangeText).join(" / ");
+      if (!detail && rec.snapshot) detail = rec.snapshot.map(([c, v]) => c + ": " + v).join(" / ");
+      rows.push([rec.status, rec.key, detail, rec.tags.join(", ")]);
+      slots.push(SLOT[rec.status] || 0);
+    }
+    const s = lastCompare.summary;
+    const sumRows = [
+      ["총 비교 행", s.total], ["동일", s.same], ["변경", s.changed],
+      ["추가", s.added], ["삭제", s.removed], ["이상 변동 행", s.anomalyRows],
+      ["결측값 변경(셀)", s.missingCells], ["타입 변경(셀)", s.typeCells],
+    ].concat(lastCompare.notes.map((n) => ["안내", n]));
+    const bytes = XlsxWriter.buildWorkbook([
+      { name: "Compare", columns: cols, rows, fillSlots: slots },
+      { name: "Summary", columns: ["항목", "값"], rows: sumRows, fillSlots: null },
+    ]);
+    const fname = "compare_result.xlsx";
+    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  // 테스트 편의를 위해 내부 기능 노출
+  window.__compare = { slots, inferKeys, compareTables, handleSlotFile, switchMode, nameScore };
+})();
 </script>
 </body>
 </html>
