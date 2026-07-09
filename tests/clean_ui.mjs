@@ -10,7 +10,10 @@ let pass=0,fail=0;const ok=(n,c,d)=>{if(c){pass++;console.log('  OK',n);}else{fa
 await page.click('#railClean');
 ok('레일 클릭 -> viewClean', await page.evaluate(()=>!document.getElementById('viewClean').classList.contains('hidden')), '');
 ok('레일 4개', (await page.$$eval('.rail-btn',e=>e.length))===4, '');
-ok('정보 아이콘 존재', await page.evaluate(()=>!!document.querySelector('#cleanSpecialInfo .info-icon')), '');
+ok('정제 옵션마다 정보 아이콘', await page.evaluate(()=>document.querySelectorAll('.clean-opts .info-icon').length>=8), '');
+ok('HTML 태그 제거 옵션 완전 삭제', await page.evaluate(()=>!document.getElementById('cl_html')), '');
+ok('기본 체크: trim/collapse/tab', await page.evaluate(()=>document.getElementById('cl_trim').checked&&document.getElementById('cl_collapse').checked&&document.getElementById('cl_tab').checked), '');
+ok('선택 옵션 기본 해제', await page.evaluate(()=>!document.getElementById('cl_newline').checked&&!document.getElementById('cl_control').checked&&!document.getElementById('cl_colspace').checked&&!document.getElementById('cl_allspecial').checked), '');
 await page.evaluate(({a,b,x})=>{
   const mk=(s,n)=>{const bin=atob(s);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new File([arr],n);};
   window.__clean.addFiles([mk(a,'dirty_utf8.csv'), mk(b,'korean_cp949.csv'), mk(x,'messy.xlsx')]);

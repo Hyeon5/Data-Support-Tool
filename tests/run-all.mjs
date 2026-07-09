@@ -20,7 +20,8 @@ const suites = [
   'xlsx_preserve.mjs', // 원본 xlsx 서식 보존 저장
   'cleaner.mjs',     // 데이터 정제 엔진(DataCleaner) 단위
   'convert.mjs',     // 4종 형식 변환 + 인코딩(CP949) + 형식 불일치
-  'clean_ui.mjs',    // 정제·변환 UI 배치 처리 + ZIP 다운로드
+  'clean_ui.mjs',    // 정제·변환 UI 배치 처리 + ZIP 다운로드 + 옵션 구성
+  'progress.mjs',    // 실시간 진행률(파일/시트/행) + cleanStatus 스타일 통일
   'ui_full.mjs',     // 전체 UI + 오프라인/네트워크 0
 ];
 

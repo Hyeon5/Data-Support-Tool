@@ -26,14 +26,20 @@ async function convertFile(fname, mode, opts){
 }
 const dec=(b64)=>Buffer.from(b64,'base64');
 console.log('[CSV -> CSV 정제 + BOM]');
-let r=await convertFile('dirty_utf8.csv','csv2csv',{dashToZero:true});
+// 컬럼명 정리·모든 특수문자 제거·dashZero 를 명시적으로 켜서 정제 동작 검증
+let r=await convertFile('dirty_utf8.csv','csv2csv',{dashToZero:true, cleanColSpace:true, cleanColSpecial:true, specialMode:'all'});
 ok('출력 1개 csv', r.outs.length===1 && r.outs[0].kind==='csv', JSON.stringify(r.outs.map(o=>o.name)));
 let buf=dec(r.outs[0].b64);
 ok('UTF-8 BOM 접두', buf[0]===0xEF&&buf[1]===0xBB&&buf[2]===0xBF, [buf[0],buf[1],buf[2]].join(','));
 let txt=buf.slice(3).toString('utf-8');
-ok('컬럼명/셀 정제됨', txt.includes('이름,금액,비고')&&txt.includes('홍길동'), JSON.stringify(txt));
+ok('컬럼명 정리(이름,금액,비고)', txt.includes('이름,금액,비고'), JSON.stringify(txt));
+ok('값 trim(홍길동)', txt.includes('홍길동'), JSON.stringify(txt));
 ok('금액 - -> 0', /\n김철수,0,/.test(txt), JSON.stringify(txt));
-ok('HTML/특수 정제', txt.includes('메모')&&!txt.includes('<b>')&&!txt.includes('!@#'), JSON.stringify(txt));
+ok('모든 특수문자 제거(!@# 제거)', !txt.includes('!@#'), JSON.stringify(txt));
+// 기본 옵션(정제 최소)에서는 특수문자/HTML 유지
+let r2=await convertFile('dirty_utf8.csv','csv2csv',{});
+let txt2=dec(r2.outs[0].b64).slice(3).toString('utf-8');
+ok('기본은 특수문자 유지(비고! 그대로)', txt2.includes('비고!'), JSON.stringify(txt2));
 console.log('[CSV -> XLSX]');
 r=await convertFile('dirty_utf8.csv','csv2xlsx',{dashToZero:true});
 ok('출력 xlsx', r.outs[0].kind==='xlsx'&&r.outs[0].name.endsWith('.xlsx'), r.outs[0].name);

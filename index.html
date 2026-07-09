@@ -94,8 +94,8 @@
   tr.anomaly td{background:var(--anomaly);}
   .progress-outer{background:#e4e9f2; border-radius:20px; height:16px; overflow:hidden;}
   .progress-inner{background:var(--accent); height:100%; width:0%; transition:width .2s;}
-  #status{margin-top:8px; font-size:13px; color:var(--muted); text-align:center;}
-  #cmpStatus{margin-top:8px; font-size:13px; color:var(--muted); text-align:center;}
+  /* 진행/상태 문구: 단일 분석·비교·정제 화면 모두 동일 스타일 사용 */
+  #status, #cmpStatus, #cleanStatus{margin-top:8px; font-size:13px; color:var(--muted); text-align:center; line-height:1.7;}
   .summary{display:flex; gap:24px; flex-wrap:wrap; margin-bottom:10px;}
   .summary .stat{background:#eef2f7; border-radius:8px; padding:10px 16px;}
   .summary .stat b{font-size:20px; display:block;}
@@ -675,25 +675,19 @@
       <div class="grid-opts clean-opts">
         <label><input type="checkbox" id="cl_trim" checked> 앞뒤 공백 제거</label>
         <label><input type="checkbox" id="cl_collapse" checked> 연속 공백 정리</label>
-        <label><input type="checkbox" id="cl_newline" checked> 줄바꿈 제거</label>
         <label><input type="checkbox" id="cl_tab" checked> Tab 문자 제거</label>
-        <label><input type="checkbox" id="cl_control" checked> 제어문자 제거</label>
-        <label><input type="checkbox" id="cl_html" checked> HTML 태그 제거</label>
-        <label><input type="checkbox" id="cl_invisible" checked> 보이지 않는 문자 제거</label>
-        <label><input type="checkbox" id="cl_colspace" checked> 컬럼명 공백 정리</label>
-        <label><input type="checkbox" id="cl_colspecial" checked> 컬럼명 특수문자 정리</label>
-      </div>
-      <div class="clean-optgroup muted">특수문자 처리 방식</div>
-      <div class="row clean-special" id="cleanSpecialRow">
-        <label><input type="radio" name="clSpecial" value="keep"> 특수문자 유지</label>
-        <label><input type="radio" name="clSpecial" value="common" checked> 일반적인 특수문자만 제거 <span id="cleanSpecialInfo"></span></label>
-        <label><input type="radio" name="clSpecial" value="all"> 모든 특수문자 제거</label>
       </div>
       <div class="clean-optgroup muted">선택 옵션</div>
       <div class="grid-opts clean-opts">
+        <label><input type="checkbox" id="cl_newline"> 줄바꿈 제거(공백 치환)</label>
+        <label><input type="checkbox" id="cl_control"> 제어문자 제거</label>
+        <label><input type="checkbox" id="cl_invisible"> 보이지 않는 문자 제거</label>
+        <label><input type="checkbox" id="cl_colspace"> 컬럼명 공백 정리</label>
+        <label><input type="checkbox" id="cl_colspecial"> 컬럼명 특수문자 정리</label>
+        <label><input type="checkbox" id="cl_allspecial"> 모든 특수문자 제거</label>
+        <label><input type="checkbox" id="cl_dashzero"> "-" 값을 0으로 치환</label>
         <label><input type="checkbox" id="cl_emptynull"> 빈 문자열 → NULL</label>
         <label><input type="checkbox" id="cl_nullempty"> NULL → 빈 문자열</label>
-        <label><input type="checkbox" id="cl_dashzero"> "-" 값을 0으로 치환 (숫자 컬럼)</label>
       </div>
       <div class="clean-optgroup muted">인코딩</div>
       <div class="row" style="gap:16px;">
@@ -706,9 +700,9 @@
 
     <!-- ④ 실행 -->
     <div class="panel runbar">
-      <div id="cleanStatus" style="margin-bottom:12px;">파일을 선택하고 [변환 시작]을 눌러 주세요.</div>
+      <div id="cleanStatus" style="margin-bottom:16px;">파일을 선택하고 [변환 시작]을 눌러 주세요.</div>
       <div class="progress-outer"><div class="progress-inner" id="cleanProgress"></div></div>
-      <div id="cleanEta" class="muted" style="font-size:12px; margin-top:6px;"></div>
+      <div class="progress-outer hidden" id="cleanFileProgWrap" style="margin-top:6px;"><div class="progress-inner" id="cleanFileProgress"></div></div>
       <div id="cleanBanner" class="err-banner hidden" role="alert" aria-live="assertive"></div>
       <div class="runbtns" style="margin-top:12px;">
         <button id="btnCleanRun" style="min-width:200px; padding:12px 20px;" disabled>변환 시작</button>
@@ -1669,11 +1663,12 @@ const DeidEngine = (function () {
  *  - 특수문자 처리: keep(유지) | common(일반만 제거·기본) | all(모두 제거).
  * ===================================================================== */
 const DataCleaner = (function () {
+  // 권장 기본: 앞뒤 공백·연속 공백·Tab 만 ON. 나머지는 선택(기본 OFF).
   const DEFAULTS = {
-    trimSpace: true, collapseSpace: true, removeNewline: true, removeTab: true,
-    removeControl: true, removeHtml: true, removeInvisible: true,
-    specialMode: "common",          // keep | common | all
-    cleanColSpace: true, cleanColSpecial: true,
+    trimSpace: true, collapseSpace: true, removeTab: true,
+    removeNewline: false, removeControl: false, removeInvisible: false,
+    specialMode: "keep",            // keep | common | all
+    cleanColSpace: false, cleanColSpecial: false,
     removeEmoji: false, emptyToNull: false, nullToEmpty: false, dashToZero: false,
   };
   // 제어문자(탭/개행 제외: 각자 옵션에서 처리)
@@ -1686,23 +1681,14 @@ const DataCleaner = (function () {
   const COMMON_RE = /[!@#$^&*`~|<>{}\[\]]/g;
   // '모든 특수문자 제거': 아래(한글·영문·숫자·공백·- _ / ( ) . % +) 외 전부 제거
   const ALLREMOVE_RE = /[^0-9A-Za-z\uAC00-\uD7A3\u3130-\u318F\u1100-\u11FF\s\-_/().%+]/g;
-  const HTML_TAG_RE = /<[^>]*>/g;
 
   function makeContext() {
-    return { specialRemoved: 0, controlRemoved: 0, columnsCleaned: 0, cellsChanged: 0, dashToZero: 0, htmlRemoved: 0 };
+    return { specialRemoved: 0, controlRemoved: 0, columnsCleaned: 0, cellsChanged: 0, dashToZero: 0 };
   }
   function countMatch(s, re) { const m = s.match(re); return m ? m.length : 0; }
 
   function cleanString(str, o, ctx) {
     let s = String(str);
-    if (o.removeHtml) {
-      const before = s.length;
-      s = s.replace(HTML_TAG_RE, "")
-        .replace(/&nbsp;/gi, " ").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
-        .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&amp;/gi, "&");
-      const removed = Math.max(0, before - s.length);
-      ctx.htmlRemoved += removed; ctx.specialRemoved += removed;
-    }
     if (o.removeNewline) { ctx.controlRemoved += countMatch(s, /[\r\n]/g); s = s.replace(/\r\n?|\n/g, " "); }
     if (o.removeTab) { ctx.controlRemoved += countMatch(s, /\t/g); s = s.replace(/\t/g, " "); }
     if (o.removeControl) { ctx.controlRemoved += countMatch(s, CONTROL_RE); s = s.replace(CONTROL_RE, ""); }
@@ -1986,42 +1972,40 @@ const Zip = (function () {
     return files;
   }
 
-  /** [{name, data:Uint8Array}] 를 STORED(무압축) ZIP 바이트로 만든다. */
-  function write(entries) {
-    const enc = new TextEncoder();
+  // items: [{nameBytes, crc, size, method(0|8), comp:Uint8Array}] → ZIP 바이트 조립
+  function assemble(items) {
     const localParts = [], central = [];
     let offset = 0;
-    for (const f of entries) {
-      const nameBytes = enc.encode(f.name);
-      const crc = crc32(f.data), size = f.data.length;
-      const lh = new Uint8Array(30 + nameBytes.length);
+    for (const it of items) {
+      const compSize = it.comp.length;
+      const lh = new Uint8Array(30 + it.nameBytes.length);
       const dv = new DataView(lh.buffer);
       dv.setUint32(0, 0x04034b50, true);
       dv.setUint16(4, 20, true); dv.setUint16(6, 0x0800, true); // UTF-8 flag
-      dv.setUint16(8, 0, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0x21, true);
-      dv.setUint32(14, crc, true); dv.setUint32(18, size, true); dv.setUint32(22, size, true);
-      dv.setUint16(26, nameBytes.length, true); dv.setUint16(28, 0, true);
-      lh.set(nameBytes, 30);
-      localParts.push(lh, f.data);
+      dv.setUint16(8, it.method, true); dv.setUint16(10, 0, true); dv.setUint16(12, 0x21, true);
+      dv.setUint32(14, it.crc, true); dv.setUint32(18, compSize, true); dv.setUint32(22, it.size, true);
+      dv.setUint16(26, it.nameBytes.length, true); dv.setUint16(28, 0, true);
+      lh.set(it.nameBytes, 30);
+      localParts.push(lh, it.comp);
 
-      const cd = new Uint8Array(46 + nameBytes.length);
+      const cd = new Uint8Array(46 + it.nameBytes.length);
       const cdv = new DataView(cd.buffer);
       cdv.setUint32(0, 0x02014b50, true);
       cdv.setUint16(4, 20, true); cdv.setUint16(6, 20, true);
-      cdv.setUint16(8, 0x0800, true); cdv.setUint16(10, 0, true);
+      cdv.setUint16(8, 0x0800, true); cdv.setUint16(10, it.method, true);
       cdv.setUint16(12, 0, true); cdv.setUint16(14, 0x21, true);
-      cdv.setUint32(16, crc, true); cdv.setUint32(20, size, true); cdv.setUint32(24, size, true);
-      cdv.setUint16(28, nameBytes.length, true);
+      cdv.setUint32(16, it.crc, true); cdv.setUint32(20, compSize, true); cdv.setUint32(24, it.size, true);
+      cdv.setUint16(28, it.nameBytes.length, true);
       cdv.setUint32(42, offset, true);
-      cd.set(nameBytes, 46);
+      cd.set(it.nameBytes, 46);
       central.push(cd);
-      offset += lh.length + size;
+      offset += lh.length + compSize;
     }
     let centralSize = 0; central.forEach(c => centralSize += c.length);
     const eocd = new Uint8Array(22);
     const edv = new DataView(eocd.buffer);
     edv.setUint32(0, 0x06054b50, true);
-    edv.setUint16(8, entries.length, true); edv.setUint16(10, entries.length, true);
+    edv.setUint16(8, items.length, true); edv.setUint16(10, items.length, true);
     edv.setUint32(12, centralSize, true); edv.setUint32(16, offset, true);
 
     const total = offset + centralSize + 22;
@@ -2032,7 +2016,40 @@ const Zip = (function () {
     out.set(eocd, pos);
     return out;
   }
-  return { read, write, crc32 };
+
+  /** [{name, data:Uint8Array}] 를 STORED(무압축) ZIP 바이트로 만든다(동기). */
+  function write(entries) {
+    const enc = new TextEncoder();
+    return assemble(entries.map((f) => ({ nameBytes: enc.encode(f.name), crc: crc32(f.data), size: f.data.length, method: 0, comp: f.data })));
+  }
+
+  // 브라우저 내장 CompressionStream 으로 raw DEFLATE 압축(외부 라이브러리 없음).
+  async function deflateRaw(bytes) {
+    if (typeof CompressionStream === "undefined") return null;
+    try {
+      const cs = new CompressionStream("deflate-raw");
+      const w = cs.writable.getWriter(); w.write(bytes); w.close();
+      const chunks = []; const rd = cs.readable.getReader();
+      for (;;) { const r = await rd.read(); if (r.done) break; chunks.push(r.value); }
+      let len = 0; chunks.forEach((c) => len += c.length);
+      const out = new Uint8Array(len); let p = 0; chunks.forEach((c) => { out.set(c, p); p += c.length; });
+      return out;
+    } catch (e) { return null; }
+  }
+  /** DEFLATE 압축 ZIP(대용량 출력 크기 축소). 압축 불가/무효 시 해당 항목은 STORED 로 폴백. */
+  async function writeAsync(entries) {
+    const enc = new TextEncoder();
+    const items = [];
+    for (const f of entries) {
+      const size = f.data.length, crc = crc32(f.data);
+      let comp = null, method = 0;
+      if (size >= 256) comp = await deflateRaw(f.data);
+      if (comp && comp.length < size) method = 8; else { comp = f.data; method = 0; }
+      items.push({ nameBytes: enc.encode(f.name), crc, size, method, comp });
+    }
+    return assemble(items);
+  }
+  return { read, write, writeAsync, crc32 };
 })();
 
 /* =====================================================================
@@ -2973,92 +2990,165 @@ const XlsxAppender = (function () {
  *  - styles.xml/sharedStrings/시트 이름/순서 등은 변경하지 않는다.
  * ===================================================================== */
 const XlsxCleaner = (function () {
-  const parser = new DOMParser();
   const dec = new TextDecoder("utf-8");
   const enc = new TextEncoder();
-  const SS_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
-  const XML_NS = "http://www.w3.org/XML/1998/namespace";
+  // 성능: DOM 파싱/직렬화를 쓰지 않고 시트 XML 을 문자열로 스캔·치환한다.
+  // (셀 구조가 규칙적이라 정규식 스캔이 DOM 대비 수십 배 빠르고 메모리도 적다)
+  const CELL_RE = /<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;   // 셀 하나(자체닫힘 또는 내용)
+  const ROW_RE = /<row\b[^>]*(?:\/>|>[\s\S]*?<\/row>)/g;
+  const T_ATTR = /\bt="([^"]+)"/;
+  const R_ATTR = /\br="([A-Z]+)\d+"/;
+  const ROWNUM_ATTR = /^<row\b[^>]*\br="(\d+)"/;
+  const V_RE = /<v\b[^>]*>([\s\S]*?)<\/v>/;
+  const IST_RE = /<t\b[^>]*>([\s\S]*?)<\/t>/g;
+  const YIELD_EVERY = 6000;   // N행마다 UI 양보 + 진행률 보고
+
+  let SHARED = [];   // clean() 실행 동안의 sharedStrings(재진입 없음: 배치는 순차 처리)
+
   function colToIndex(letters) { let n = 0; for (let i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64); return n - 1; }
-  const child = (el, name) => { for (let i = 0; i < el.childNodes.length; i++) { const c = el.childNodes[i]; if (c.nodeType === 1 && c.localName === name) return c; } return null; };
+  function decodeXml(s) {
+    if (s.indexOf("&") === -1) return s;
+    return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/&amp;/g, "&");
+  }
+  function escXml(s) { return s.indexOf("&") === -1 && s.indexOf("<") === -1 && s.indexOf(">") === -1 ? s : s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-  // 시트 grid 로부터 grid-열 인덱스별 '숫자 컬럼' 판정('-' 제외 80% 이상 숫자)
-  function numericColSet(grid, headerRow0) {
-    let width = 0; for (const r of grid) if (r && r.length > width) width = r.length;
-    const set = new Set();
-    for (let c = 0; c < width; c++) {
-      let numeric = 0, other = 0;
-      for (let r = headerRow0 + 1; r < grid.length; r++) {
-        const v = grid[r] ? grid[r][c] : null;
-        if (v == null || Values.isMissing(v)) continue;
-        if (typeof v === "string" && v.trim() === "-") continue;
-        if (typeof v === "number" || Values.toNumber(v) !== null) numeric++; else other++;
-      }
-      if (numeric > 0 && numeric / (numeric + other) >= 0.8) set.add(c);
+  // 셀 문자열에서 텍스트 값을 해석한다. 텍스트 셀이 아니거나 수식이면 null 반환.
+  function cellText(cell, gt, t) {
+    if (t !== "s" && t !== "str" && t !== "inlineStr") return null;
+    const inner = cell.slice(gt + 1, cell.length - 4);   // '</c>' 4글자 제거
+    if (inner.indexOf("<f") !== -1) return null;          // 수식 셀 보존
+    if (t === "inlineStr") { let s = "", m; IST_RE.lastIndex = 0; while ((m = IST_RE.exec(inner))) s += decodeXml(m[1]); return s; }
+    const vm = V_RE.exec(inner); if (!vm) return null;
+    return t === "s" ? (SHARED[parseInt(vm[1], 10)] || "") : decodeXml(vm[1]);
+  }
+
+  // 행 문자열에서 값 배열(colIdx→값)을 뽑는다(헤더 탐지/숫자열 판정용).
+  function rowValues(rowStr) {
+    const rm = ROWNUM_ATTR.exec(rowStr);
+    const rowNum = rm ? parseInt(rm[1], 10) : 0;
+    const vals = [];
+    const gt = rowStr.indexOf(">");
+    if (gt < 0 || rowStr[gt - 1] === "/") return { rowNum, vals };
+    let m; CELL_RE.lastIndex = 0;
+    while ((m = CELL_RE.exec(rowStr))) {
+      const cell = m[0], cgt = cell.indexOf(">");
+      const open = cell.slice(0, cgt + 1);
+      const rr = R_ATTR.exec(open); if (!rr) continue;
+      const colIdx = colToIndex(rr[1]);
+      if (cell[cgt - 1] === "/") continue;
+      const tm = T_ATTR.exec(open), t = tm ? tm[1] : null;
+      const inner = cell.slice(cgt + 1, cell.length - 4);
+      let val = null;
+      if (t === "s") { const vm = V_RE.exec(inner); if (vm) val = SHARED[parseInt(vm[1], 10)] || ""; }
+      else if (t === "inlineStr") { let s = "", mm; IST_RE.lastIndex = 0; while ((mm = IST_RE.exec(inner))) s += decodeXml(mm[1]); val = s; }
+      else if (t === "str") { const vm = V_RE.exec(inner); if (vm) val = decodeXml(vm[1]); }
+      else { const vm = V_RE.exec(inner); if (vm) { const n = Number(vm[1]); val = isNaN(n) ? vm[1] : n; } }
+      vals[colIdx] = val;
     }
-    return set;
+    return { rowNum, vals };
   }
 
-  function clearChildren(el) { while (el.firstChild) el.removeChild(el.firstChild); }
-  function encodeString(doc, cell, text) {
-    clearChildren(cell);
-    cell.setAttribute("t", "inlineStr");
-    const is = doc.createElementNS(SS_NS, "is");
-    const t = doc.createElementNS(SS_NS, "t");
-    t.setAttributeNS(XML_NS, "xml:space", "preserve");
-    t.textContent = text;
-    is.appendChild(t); cell.appendChild(is);
+  // 셀 하나를 정제해 새 셀 문자열을 반환한다(변경 없으면 원본 그대로).
+  function cleanCell(cell, rowNum, o, ctx, headerRowNum, numCols) {
+    const gt = cell.indexOf(">");
+    if (cell[gt - 1] === "/") return cell;                 // 빈 셀
+    const open = cell.slice(0, gt + 1);
+    const tm = T_ATTR.exec(open), t = tm ? tm[1] : null;
+    const str = cellText(cell, gt, t);
+    if (str === null) return cell;                         // 텍스트 셀 아님/수식
+    let newInner, newT;
+    if (rowNum === headerRowNum) {
+      const nv = DataCleaner.cleanHeader(str, o, ctx);
+      if (nv === str) return cell;
+      newInner = '<is><t xml:space="preserve">' + escXml(nv) + "</t></is>"; newT = "inlineStr";
+    } else {
+      let colIdx = -1;
+      if (o.dashToZero) { const rr = R_ATTR.exec(open); if (rr) colIdx = colToIndex(rr[1]); }
+      const cv = DataCleaner.cleanCellValue(str, o, numCols.has(colIdx), ctx);
+      if (cv === null) { newInner = ""; newT = null; }
+      else if (typeof cv === "number") { newInner = "<v>" + cv + "</v>"; newT = null; }
+      else { if (cv === str) return cell; newInner = '<is><t xml:space="preserve">' + escXml(cv) + "</t></is>"; newT = "inlineStr"; }
+    }
+    let attrs = open.slice(2, gt).replace(/\s+t="[^"]*"/, "");   // 기존 t 제거(r/s 등 나머지 보존)
+    const tAttr = newT ? ' t="' + newT + '"' : "";
+    return newInner === "" ? "<c" + attrs + tAttr + "/>" : "<c" + attrs + tAttr + ">" + newInner + "</c>";
   }
-  function encodeNumber(doc, cell, num) {
-    clearChildren(cell); cell.removeAttribute("t");
-    const v = doc.createElementNS(SS_NS, "v"); v.textContent = String(num); cell.appendChild(v);
+  function cleanRow(rowStr, o, ctx, headerRowNum, numCols) {
+    const rm = ROWNUM_ATTR.exec(rowStr);
+    const rowNum = rm ? parseInt(rm[1], 10) : 0;
+    const gt = rowStr.indexOf(">");
+    if (gt < 0 || rowStr[gt - 1] === "/") return rowStr;   // 빈 행
+    return rowStr.replace(CELL_RE, (cell) => cleanCell(cell, rowNum, o, ctx, headerRowNum, numCols));
   }
-  function encodeEmpty(cell) { clearChildren(cell); cell.removeAttribute("t"); }
 
-  /** @return {bytes, summary} */
-  function clean(wb, opts) {
+  // 시트 XML 문자열 하나를 정제(행 단위 청크 처리 + 진행률 보고).
+  async function cleanSheet(xml, o, ctx, onRow) {
+    const sdStart = xml.indexOf("<sheetData");
+    if (sdStart < 0) return xml;
+    const sdOpenEnd = xml.indexOf(">", sdStart);
+    if (sdOpenEnd < 0 || xml[sdOpenEnd - 1] === "/") return xml;   // <sheetData/> (빈 시트)
+    const sdClose = xml.indexOf("</sheetData>", sdOpenEnd);
+    if (sdClose < 0) return xml;
+    const head = xml.slice(0, sdOpenEnd + 1), tail = xml.slice(sdClose);
+    const body = xml.slice(sdOpenEnd + 1, sdClose);
+    const rows = body.match(ROW_RE) || [];
+
+    // 헤더 행 탐지: 앞쪽 최대 60행만 부분 grid 로 구성
+    const LIMIT = Math.min(rows.length, 60);
+    const partial = []; let maxRow = 0;
+    for (let i = 0; i < LIMIT; i++) { const rv = rowValues(rows[i]); if (rv.rowNum) { partial[rv.rowNum - 1] = rv.vals; if (rv.rowNum > maxRow) maxRow = rv.rowNum; } }
+    for (let r = 0; r < maxRow; r++) if (!partial[r]) partial[r] = [];
+    const headerRowNum = (gridToTable(partial).meta.headerRowNum) || 1;
+
+    // 숫자 컬럼 판정('-'→0 옵션일 때만 전체 스캔)
+    let numCols = new Set();
+    if (o.dashToZero) {
+      const cnt = {};
+      for (let i = 0; i < rows.length; i++) {
+        const rv = rowValues(rows[i]); if (rv.rowNum <= headerRowNum) continue;
+        const vals = rv.vals;
+        for (let c = 0; c < vals.length; c++) {
+          const v = vals[c]; if (v == null || v === "") continue;
+          if (typeof v === "string" && v.trim() === "-") continue;
+          const isNum = typeof v === "number" || Values.toNumber(v) !== null;
+          const e = cnt[c] || (cnt[c] = { n: 0, o: 0 }); if (isNum) e.n++; else e.o++;
+        }
+      }
+      for (const c in cnt) { const e = cnt[c]; if (e.n > 0 && e.n / (e.n + e.o) >= 0.8) numCols.add(parseInt(c, 10)); }
+    }
+
+    // 행 재작성(청크 단위로 UI 양보 + 진행률)
+    const out = new Array(rows.length);
+    for (let i = 0; i < rows.length; i++) {
+      out[i] = cleanRow(rows[i], o, ctx, headerRowNum, numCols);
+      if (i % YIELD_EVERY === 0) { if (onRow) onRow(i, rows.length); await new Promise((r) => setTimeout(r, 0)); }
+    }
+    if (onRow) onRow(rows.length, rows.length);
+    return head + out.join("") + tail;
+  }
+
+  /** 원본 xlsx 의 텍스트 셀 값만 정제(서식 전부 보존). @return {bytes, summary} */
+  async function clean(wb, opts, onProgress) {
     const o = Object.assign({}, DataCleaner.DEFAULTS, opts || {});
     const ctx = DataCleaner.makeContext();
     const files = Object.assign({}, wb.files);
+    SHARED = wb.shared || [];
+    const sn = wb.sheets.length;
     let sheetCount = 0;
-    for (let si = 0; si < wb.sheets.length; si++) {
+    for (let si = 0; si < sn; si++) {
       const sheet = wb.sheets[si];
       if (!files[sheet.path]) continue;
-      const grid = XlsxReader.grid(wb, si);
-      const meta = gridToTable(grid).meta;
-      const headerRow0 = (meta.headerRowNum || 1) - 1;
-      const numCols = o.dashToZero ? numericColSet(grid, headerRow0) : new Set();
-
-      const doc = parser.parseFromString(dec.decode(files[sheet.path]), "application/xml");
-      if (doc.getElementsByTagName("parsererror").length) continue;
-      const cells = doc.getElementsByTagName("c");
-      for (let i = 0; i < cells.length; i++) {
-        const cell = cells[i];
-        if (child(cell, "f")) continue;               // 수식 셀은 보존
-        const t = cell.getAttribute("t");
-        if (t !== "s" && t !== "str" && t !== "inlineStr") continue;   // 텍스트 셀만
-        // 값 문자열 해석
-        let str = "";
-        if (t === "inlineStr") { const isEl = child(cell, "is"); if (isEl) { const ts = isEl.getElementsByTagName("t"); for (let k = 0; k < ts.length; k++) str += ts[k].textContent; } }
-        else { const vEl = child(cell, "v"); if (!vEl) continue; str = t === "s" ? (wb.shared[parseInt(vEl.textContent, 10)] || "") : vEl.textContent; }
-        const ref = cell.getAttribute("r") || "";
-        const L = ref.replace(/[0-9]/g, ""); const colIdx = L ? colToIndex(L) : -1;
-        const rowNum = parseInt(ref.replace(/[^0-9]/g, ""), 10) || 0;
-        if (rowNum === meta.headerRowNum) {
-          const nv = DataCleaner.cleanHeader(str, o, ctx);
-          if (nv !== str) encodeString(doc, cell, nv);
-          continue;
-        }
-        const cv = DataCleaner.cleanCellValue(str, o, numCols.has(colIdx), ctx);
-        if (cv === null) encodeEmpty(cell);
-        else if (typeof cv === "number") encodeNumber(doc, cell, cv);
-        else if (cv !== str) encodeString(doc, cell, cv);
-      }
-      files[sheet.path] = enc.encode(new XMLSerializer().serializeToString(doc));
+      const onRow = onProgress ? (done, total) => onProgress({ sheetIndex: si, sheetCount: sn, sheetName: sheet.name, rowsDone: done, rowsTotal: total }) : null;
+      const xml = dec.decode(files[sheet.path]);
+      files[sheet.path] = enc.encode(await cleanSheet(xml, o, ctx, onRow));
       sheetCount++;
     }
     ctx.sheetCount = sheetCount;
     const entries = Object.keys(files).map((n) => ({ name: n, data: files[n] }));
-    return { bytes: Zip.write(entries), summary: ctx };
+    return { bytes: await Zip.writeAsync(entries), summary: ctx };   // DEFLATE 압축으로 출력 크기 축소
   }
 
   return { clean };
@@ -3086,9 +3176,9 @@ const Downloader = (function () {
   }
   const saveXlsx = (bytes, name) => saveBytes(bytes, ensureExt(name, "xlsx"), MIME.xlsx);
   const saveCsv = (bytes, name) => saveBytes(bytes, ensureExt(name, "csv"), MIME.csv);
-  // files: [{name, data:Uint8Array}]
-  function zipBytes(files) { return Zip.write(files); }
-  const saveZip = (files, name) => saveBytes(Zip.write(files), ensureExt(name, "zip"), MIME.zip);
+  // files: [{name, data:Uint8Array}] — DEFLATE 압축으로 크기 축소(다운로드 편의)
+  async function zipBytes(files) { return await Zip.writeAsync(files); }
+  async function saveZip(files, name) { saveBytes(await Zip.writeAsync(files), ensureExt(name, "zip"), MIME.zip); }
   return { saveBytes, saveXlsx, saveCsv, saveZip, zipBytes, ensureExt, MIME };
 })();
 window.__download = Downloader;
@@ -4190,14 +4280,28 @@ const TOOLTIP_INFO = {
     practical: "연 단위 비교는 30~50%, 월 단위 비교는 50~100%를 자주 사용합니다.",
     caution: "감소는 -100%보다 작아질 수 없으므로, 감소 탐지가 목적이라면 100% 미만으로 설정해 주세요.",
   },
-  clean_special: {
-    title: "일반적인 특수문자만 제거",
-    meaning: "아래 문자를 제거합니다:  ! @ # $ ^ & * ` ~ | < > { } [ ]",
-    purpose: "공공데이터 표준에 어긋나는 기호를 정리하되, 자주 쓰는 기호는 남겨 둡니다.",
+  /* --- ④ 데이터 정제 옵션 도움말(각 체크박스 옆 i 아이콘) --- */
+  cl_trim: { title: "앞뒤 공백 제거", meaning: "각 셀 값의 맨 앞·맨 뒤 공백을 제거합니다.", practical: "가장 흔한 정제 항목으로 기본 권장입니다." },
+  cl_collapse: { title: "연속 공백 정리", meaning: "값 중간의 여러 칸 공백을 한 칸으로 줄입니다(예: '가  나' → '가 나')." },
+  cl_tab: { title: "Tab 문자 제거", meaning: "값에 섞인 탭 문자를 공백으로 바꿉니다.", caution: "탭이 열 구분에 쓰인 것이 아니라 값 안에 들어간 경우를 정리합니다." },
+  cl_newline: { title: "줄바꿈 제거(공백 치환)", meaning: "셀 값 안의 줄바꿈(Enter)을 공백 한 칸으로 바꿉니다.", caution: "한 셀에 여러 줄로 입력된 값이 한 줄로 합쳐집니다." },
+  cl_control: { title: "제어문자 제거", meaning: "화면에 보이지 않는 제어문자(널 문자 등)를 제거합니다." },
+  cl_invisible: { title: "보이지 않는 문자 제거", meaning: "폭이 0인 공백·BOM·방향 제어 문자 등 눈에 안 보이는 유니코드를 제거합니다.", practical: "웹에서 복사한 값에 자주 섞여 들어갑니다." },
+  cl_colspace: { title: "컬럼명 공백 정리", meaning: "머리글(컬럼명)의 앞뒤·중복 공백을 정리합니다." },
+  cl_colspecial: { title: "컬럼명 특수문자 정리", meaning: "머리글의 ! @ # 등 특수문자를 제거합니다(값은 건드리지 않음).", caution: "공공데이터 컬럼명 규칙을 맞출 때 사용합니다." },
+  cl_allspecial: {
+    title: "모든 특수문자 제거",
+    meaning: "유지 대상 외 모든 기호를 제거합니다.",
     common: "유지 대상: 한글 · 영문 · 숫자 · - · _ · / · . · ( ) · % · +",
-    practical: "쉼표(,)·콜론(:) 등 목록 구분 기호는 그대로 유지됩니다.",
-    caution: "모든 기호를 없애려면 '모든 특수문자 제거'를 선택해 주세요(유지 대상만 남습니다).",
+    caution: "체크하지 않으면 특수문자는 그대로 둡니다(기본).",
   },
+  cl_dashzero: {
+    title: '"-" 값을 0으로 치환',
+    meaning: "숫자로 인식되는 컬럼에서 결측 표기 '-' 를 숫자 0 으로 바꿉니다.",
+    caution: "코드값·문자열의 '-'(예: A-001)는 바꾸지 않습니다.",
+  },
+  cl_emptynull: { title: "빈 문자열 → NULL", meaning: "빈 값(\"\")을 진짜 빈 칸(NULL)으로 바꿉니다." },
+  cl_nullempty: { title: "NULL → 빈 문자열", meaning: "빈 칸(NULL)을 빈 문자열(\"\")로 바꿉니다.", caution: "'빈 문자열 → NULL' 과 반대 동작입니다." },
   p_cmp_z: {
     title: "변화량 Z-Score 임계치",
     meaning: "컬럼별 변화량 분포에서 표준편차의 몇 배 이상 벗어난 변화를 이상 변동으로 볼지 정합니다.",
@@ -5212,29 +5316,32 @@ window.__infoTooltip = InfoTooltip;
     return {
       trimSpace: $("cl_trim").checked, collapseSpace: $("cl_collapse").checked,
       removeNewline: $("cl_newline").checked, removeTab: $("cl_tab").checked,
-      removeControl: $("cl_control").checked, removeHtml: $("cl_html").checked,
+      removeControl: $("cl_control").checked,
       removeInvisible: $("cl_invisible").checked,
       cleanColSpace: $("cl_colspace").checked, cleanColSpecial: $("cl_colspecial").checked,
-      specialMode: (document.querySelector("input[name=clSpecial]:checked") || {}).value || "common",
+      specialMode: $("cl_allspecial").checked ? "all" : "keep",
       emptyToNull: $("cl_emptynull").checked,
       nullToEmpty: $("cl_nullempty").checked, dashToZero: $("cl_dashzero").checked,
     };
   }
   function anyClean(o) {
     return o.specialMode !== "keep" || o.trimSpace || o.collapseSpace || o.removeNewline || o.removeTab ||
-      o.removeControl || o.removeHtml || o.removeInvisible || o.cleanColSpace || o.cleanColSpecial ||
+      o.removeControl || o.removeInvisible || o.cleanColSpace || o.cleanColSpecial ||
       o.emptyToNull || o.nullToEmpty || o.dashToZero;
   }
-  const CTX_KEYS = ["specialRemoved", "controlRemoved", "columnsCleaned", "cellsChanged", "dashToZero", "htmlRemoved"];
+  const CTX_KEYS = ["specialRemoved", "controlRemoved", "columnsCleaned", "cellsChanged", "dashToZero"];
   function mergeCtx(agg, c) { CTX_KEYS.forEach((k) => { agg[k] = (agg[k] || 0) + (c[k] || 0); }); if (c.sheetCount) agg.sheetCount = (agg.sheetCount || 0) + c.sheetCount; }
 
+  const yieldUi = () => new Promise((r) => setTimeout(r, 0));
   // 파일 1건 변환 → {outputs:[{name,data,kind}], summary}
-  async function convertOne(file, mode, opts, csvOut, csvIn) {
+  // onProgress({phase, sheetIndex, sheetCount, sheetName, rowsDone, rowsTotal})
+  async function convertOne(file, mode, opts, csvOut, csvIn, onProgress) {
     const ext = extOf(file.name), src = MODE_SRC[mode];
     if (src === "xlsx" && ext !== "xlsx" && ext !== "xls")
       throw new Error("이 변환 방식은 XLSX 파일만 처리합니다 (현재: ." + (ext || "?") + ")");
     if (src === "csv" && ext !== "csv")
       throw new Error("이 변환 방식은 CSV 파일만 처리합니다 (현재: ." + (ext || "?") + ")");
+    const prog = onProgress || function () {};
     const buf = new Uint8Array(await file.arrayBuffer());
     const base = baseOf(file.name);
     const bomOut = csvOut !== "nobom";
@@ -5245,39 +5352,46 @@ window.__infoTooltip = InfoTooltip;
         const wb0 = await A.loadWorkbook(file);
         const agg = A.DataCleaner.makeContext();
         const sheetsOut = [];
-        wb0.sheets.forEach((nm, i) => {
+        for (let i = 0; i < wb0.sheets.length; i++) {
+          prog({ phase: "convert", sheetIndex: i, sheetCount: wb0.sheets.length, sheetName: wb0.sheets[i] });
           const t = wb0.readSheet(i);
           const c = A.DataCleaner.cleanTable(t.columns, t.rows, opts);
           mergeCtx(agg, c.summary);
-          sheetsOut.push({ name: safeName(nm).slice(0, 31), columns: c.columns, rows: c.rows, fillSlots: null });
-        });
+          sheetsOut.push({ name: safeName(wb0.sheets[i]).slice(0, 31), columns: c.columns, rows: c.rows, fillSlots: null });
+          await yieldUi();
+        }
         agg.sheetCount = sheetsOut.length;
         return { outputs: [{ name: base + ".xlsx", data: A.XlsxWriter.buildWorkbook(sheetsOut), kind: "xlsx" }], summary: agg };
       }
       const wb = A.XlsxReader.open(buf);
       if (!anyClean(opts)) return { outputs: [{ name: base + ".xlsx", data: buf, kind: "xlsx" }], summary: { sheetCount: wb.sheets.length } };
-      const res = A.XlsxCleaner.clean(wb, opts);
+      const res = await A.XlsxCleaner.clean(wb, opts, (p) => prog(Object.assign({ phase: "convert" }, p)));
       return { outputs: [{ name: base + ".xlsx", data: res.bytes, kind: "xlsx" }], summary: res.summary };
     }
     if (mode === "xlsx2csv") {
       const wb = await A.loadWorkbook(file);
       const agg = A.DataCleaner.makeContext(); const outs = [];
       const multi = wb.sheets.length > 1;
-      wb.sheets.forEach((nm, i) => {
+      for (let i = 0; i < wb.sheets.length; i++) {
+        prog({ phase: "convert", sheetIndex: i, sheetCount: wb.sheets.length, sheetName: wb.sheets[i] });
         const t = wb.readSheet(i);
+        prog({ phase: "convert", sheetIndex: i, sheetCount: wb.sheets.length, sheetName: wb.sheets[i], rowsDone: t.rows.length, rowsTotal: t.rows.length });
         const c = A.DataCleaner.cleanTable(t.columns, t.rows, opts);
         mergeCtx(agg, c.summary);
         const csv = A.CsvWriter.toBytes(c.columns, c.rows, { bom: bomOut });
-        outs.push({ name: (multi ? base + "_" + safeName(nm) : base) + ".csv", data: csv, kind: "csv" });
-      });
+        outs.push({ name: (multi ? base + "_" + safeName(wb.sheets[i]) : base) + ".csv", data: csv, kind: "csv" });
+        await yieldUi();
+      }
       agg.sheetCount = wb.sheets.length;
       return { outputs: outs, summary: agg };
     }
     if (mode === "csv2csv" || mode === "csv2xlsx") {
-      const grid = await A.CsvReader.readGrid(buf, null, forcedIn);
+      const grid = await A.CsvReader.readGrid(buf, (pct) => prog({ phase: "read", percent: pct }), forcedIn);
+      prog({ phase: "convert", sheetIndex: 0, sheetCount: 1, sheetName: "(파일 전체)", rowsDone: grid.length, rowsTotal: grid.length });
       const t = window.__readers.gridToTable(grid);
       const c = A.DataCleaner.cleanTable(t.columns, t.rows, opts);
       c.summary.sheetCount = 1;
+      await yieldUi();
       if (mode === "csv2csv")
         return { outputs: [{ name: base + ".csv", data: A.CsvWriter.toBytes(c.columns, c.rows, { bom: bomOut }), kind: "csv" }], summary: c.summary };
       const bytes = A.XlsxWriter.buildWorkbook([{ name: "Sheet1", columns: c.columns, rows: c.rows, fillSlots: null }]);
@@ -5319,6 +5433,24 @@ window.__infoTooltip = InfoTooltip;
     afterFilesChanged();
   }
 
+  // 실시간 진행률: 전체 바 + 현재 파일 바 + 파일/시트/행 문구
+  function renderProgress(fileIdx, fileName, p, N) {
+    let within = 0;
+    if (p) {
+      if (p.phase === "read" && p.percent != null) within = (p.percent / 100) * 0.5;   // 읽기는 파일 진행의 앞 절반
+      else if (p.rowsTotal) within = ((p.sheetIndex || 0) + (p.rowsDone || 0) / Math.max(1, p.rowsTotal)) / (p.sheetCount || 1);
+      else if (p.sheetCount) within = (p.sheetIndex || 0) / (p.sheetCount || 1);
+    }
+    within = Math.max(0, Math.min(1, within));
+    const overall = Math.min(100, Math.round(((fileIdx + within) / N) * 100));
+    $("cleanProgress").style.width = overall + "%";
+    $("cleanFileProgress").style.width = Math.round(within * 100) + "%";
+    const lines = ["처리 중... " + overall + "%", "파일 : " + esc(fileName) + " (" + (fileIdx + 1) + " / " + N + ")"];
+    if (p && p.sheetName) lines.push("시트 : " + esc(String(p.sheetName)) + " (" + ((p.sheetIndex || 0) + 1) + " / " + (p.sheetCount || 1) + ")");
+    if (p && p.rowsTotal) lines.push("행 : " + (p.rowsDone || 0).toLocaleString() + " / " + p.rowsTotal.toLocaleString());
+    $("cleanStatus").innerHTML = lines.join("<br>");
+  }
+
   async function runBatch() {
     if (busy || !files.length) return;
     const mode = curMode(), opts = collectOpts();
@@ -5326,17 +5458,18 @@ window.__infoTooltip = InfoTooltip;
     busy = true; setCleanBanner(""); $("btnCleanRun").disabled = true;
     files.forEach((f) => { f.status = "wait"; f.message = ""; });
     lastOutputs = [];
+    const N = files.length;
+    $("cleanFileProgWrap").classList.toggle("hidden", N <= 1);   // 현재 파일 바는 다중 파일일 때만
     const agg = A.DataCleaner.makeContext(); agg.sheetCount = 0;
     let okCount = 0, outCount = 0;
     const t0 = performance.now();
-    for (let i = 0; i < files.length; i++) {
+    for (let i = 0; i < N; i++) {
       const entry = files[i];
       entry.status = "run"; renderFileList();
-      $("cleanStatus").textContent = "처리 중 (" + (i + 1) + " / " + files.length + "): " + entry.file.name;
-      $("cleanProgress").style.width = Math.round((i / files.length) * 100) + "%";
+      renderProgress(i, entry.file.name, null, N);
       await new Promise((r) => setTimeout(r, 0));   // UI 양보(브라우저 멈춤 방지)
       try {
-        const res = await convertOne(entry.file, mode, opts, csvOut, csvIn);
+        const res = await convertOne(entry.file, mode, opts, csvOut, csvIn, (p) => renderProgress(i, entry.file.name, p, N));
         res.outputs.forEach((o) => lastOutputs.push(o));
         mergeCtx(agg, res.summary);
         outCount += res.outputs.length; okCount++;
@@ -5347,7 +5480,7 @@ window.__infoTooltip = InfoTooltip;
       }
       renderFileList();
     }
-    $("cleanProgress").style.width = "100%";
+    $("cleanProgress").style.width = "100%"; $("cleanFileProgress").style.width = "100%";
     const secs = ((performance.now() - t0) / 1000).toFixed(1);
     $("cleanStatus").textContent = "완료: 성공 " + okCount + " / " + files.length + "개 · 소요 " + secs + "초";
     busy = false; $("btnCleanRun").disabled = files.length === 0;
@@ -5357,14 +5490,13 @@ window.__infoTooltip = InfoTooltip;
   function optSummaryText(o) {
     const on = [];
     if (o.trimSpace) on.push("앞뒤 공백"); if (o.collapseSpace) on.push("연속 공백");
-    if (o.removeNewline) on.push("줄바꿈"); if (o.removeTab) on.push("Tab");
-    if (o.removeControl) on.push("제어문자"); if (o.removeHtml) on.push("HTML");
-    if (o.removeInvisible) on.push("숨은 문자");
-    on.push("특수문자:" + ({ keep: "유지", common: "일반 제거", all: "모두 제거" }[o.specialMode]));
-    if (o.emptyToNull) on.push("빈값→NULL");
-    if (o.nullToEmpty) on.push("NULL→빈값"); if (o.dashToZero) on.push('"-"→0');
+    if (o.removeTab) on.push("Tab"); if (o.removeNewline) on.push("줄바꿈");
+    if (o.removeControl) on.push("제어문자"); if (o.removeInvisible) on.push("숨은 문자");
+    if (o.specialMode === "all") on.push("모든 특수문자 제거");
     if (o.cleanColSpace || o.cleanColSpecial) on.push("컬럼명 정리");
-    return on.join(" · ");
+    if (o.dashToZero) on.push('"-"→0');
+    if (o.emptyToNull) on.push("빈값→NULL"); if (o.nullToEmpty) on.push("NULL→빈값");
+    return on.length ? on.join(" · ") : "정제 없음(원본 유지)";
   }
   const MODE_LABEL = { xlsx2xlsx: "XLSX → XLSX", xlsx2csv: "XLSX → CSV", csv2csv: "CSV → CSV", csv2xlsx: "CSV → XLSX" };
 
@@ -5394,7 +5526,7 @@ window.__infoTooltip = InfoTooltip;
     try { $("cleanResultPanel").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
   }
 
-  function download() {
+  async function download() {
     if (!lastOutputs.length) return;
     if (lastOutputs.length === 1) {
       const o = lastOutputs[0];
@@ -5410,7 +5542,10 @@ window.__infoTooltip = InfoTooltip;
       used[o.name] = (used[o.name] || 0) + 1;
       entries.push({ name: nm, data: o.data });
     }
-    window.__download.saveZip(entries, "converted_files.zip");
+    const btn = $("btnCleanDownload"); const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "압축 중...";
+    try { await window.__download.saveZip(entries, "converted_files.zip"); }
+    finally { btn.disabled = false; btn.textContent = orig; }
   }
 
   // ---------- 이벤트 바인딩 ----------
@@ -5432,9 +5567,6 @@ window.__infoTooltip = InfoTooltip;
     h.setAttribute("role", "button"); h.setAttribute("tabindex", "0");
     h.addEventListener("click", () => $("cleanOptPanel").classList.toggle("collapsed"));
     h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("cleanOptPanel").classList.toggle("collapsed"); } });
-
-    // 특수문자 정보 아이콘
-    if (window.__infoTooltip && $("cleanSpecialInfo")) $("cleanSpecialInfo").appendChild(window.__infoTooltip.createIcon("clean_special"));
 
     // 변환 방식 변경 시 파일 형식 재검증(기존 파일 상태 초기화)
     document.querySelectorAll("input[name=convMode]").forEach((r) => r.addEventListener("change", () => { files.forEach((f) => { f.status = "wait"; f.message = ""; }); afterFilesChanged(); }));

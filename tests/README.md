@@ -42,7 +42,8 @@ node tests/samples.mjs      # 개별 실행
 | `xlsx_preserve.mjs` | 원본 xlsx 서식(글꼴·열너비·행높이) 보존 저장 (`fixtures/formatted.xlsx`) |
 | `cleaner.mjs` | 데이터 정제 엔진(공백/제어/HTML/특수문자/`"-"→0`/빈값↔NULL/컬럼명) |
 | `convert.mjs` | 4종 형식 변환(XLSX↔CSV) + CP949 자동 인식 + 형식 불일치 오류 (`fixtures/*.csv`, `messy.xlsx`) |
-| `clean_ui.mjs` | 정제·변환 UI 배치 처리(다중 파일·성공/실패·진행률) + ZIP 다운로드 |
+| `clean_ui.mjs` | 정제·변환 UI 배치 처리 + ZIP 다운로드 + 옵션 구성(기본/선택·HTML 삭제·정보 아이콘) |
+| `progress.mjs` | 실시간 진행률(파일/시트/행) + cleanStatus 스타일 = cmpStatus (`fixtures/prog.xlsx`) |
 | `ui_full.mjs` | 전체 UI 통합 + 외부 네트워크 요청 0건 |
 
 ## 참고
