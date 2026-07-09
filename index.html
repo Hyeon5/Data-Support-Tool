@@ -4375,7 +4375,7 @@ window.__infoTooltip = InfoTooltip;
 
   function confBadge(d) {
     if (!d.detected) return '<span class="muted">' + esc(d.typeLabel || "-") + "</span>";
-    const color = d.confidence === "높음" ? "#2e7d32" : (d.confidence === "중간" ? "#b26a00" : "#616e7c");
+    const color = d.confidence === "높음" ? "#2e7d32" : (d.confidence === "중간" ? "#a05d00" : "#616e7c");
     return '<span style="color:' + color + ';font-weight:600;">' + esc(d.confidence) + "</span>";
   }
 
