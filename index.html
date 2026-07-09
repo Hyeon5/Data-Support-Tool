@@ -43,6 +43,10 @@
   button:disabled{background:#a9b4c0; cursor:not-allowed;}
   button.secondary{background:#e4e9f2; color:#1f2933;}
   button.secondary:hover{background:#d3dbe8;}
+  button.danger{background:#F5B7B1; color:#1a1a1a;}
+  button.danger:hover{background:#EC9A93;}
+  .err-banner{background:#FADBD8; border:1px solid #E6A9A2; color:#1a1a1a;
+    border-radius:8px; padding:10px 14px; margin-top:10px; font-size:14px; line-height:1.5;}
   input[type=text],input[type=number]{
     border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-size:13px;
   }
@@ -79,6 +83,11 @@
   .set-off label{ color:#a7b0bb; }
   .panel.set-off > h2{ color:#a7b0bb; }
   .panel.set-off .ma-list, .panel.set-off .tbl-scroll{ opacity:.6; }
+  /* ===== UX-1: 접이식 설정 패널 ===== */
+  .panel.coll > h2{ cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:8px; user-select:none; }
+  .panel.coll > h2 .coll-caret{ font-size:12px; color:var(--muted); transition:transform .15s; }
+  .panel.coll.collapsed > h2 .coll-caret{ transform:rotate(-90deg); }
+  .panel.coll.collapsed > :not(h2){ display:none; }
   .filecue{color:var(--muted); font-style:italic;}
   .note{font-size:12px; color:var(--muted); margin-top:6px;}
   .runbar{position:sticky; bottom:0; background:var(--panel); border-top:1px solid var(--line);
@@ -288,8 +297,8 @@
   </div>
 
   <!-- ② 분석 옵션 -->
-  <div class="panel">
-    <h2><span class="badge">2</span> 분석 옵션</h2>
+  <div class="panel coll collapsed" id="optPanel">
+    <h2><span><span class="badge">2</span> 분석 옵션</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
     <div class="grid-opts">
       <label><input type="checkbox" id="opt_missing" checked> 결측치 탐지</label>
       <label><input type="checkbox" id="opt_duplicate" checked> 중복 데이터 탐지</label>
@@ -304,8 +313,8 @@
   </div>
 
   <!-- 결측 허용 컬럼 -->
-  <div class="panel" id="missingAllowPanel">
-    <h2>결측 허용 컬럼 (결측치 탐지)</h2>
+  <div class="panel coll collapsed" id="missingAllowPanel">
+    <h2><span>결측 허용 컬럼 (결측치 탐지)</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
     <p class="muted">체크한 컬럼은 결측값(NULL·빈 값)이 있어도 정상으로 처리합니다. 체크하지 않은 컬럼만 결측치 탐지를 수행합니다.</p>
     <div class="row" style="margin-bottom:8px;">
       <button type="button" id="maSelectAll" class="secondary">전체 선택</button>
@@ -315,8 +324,8 @@
   </div>
 
   <!-- 알고리즘 파라미터 -->
-  <div class="panel">
-    <h2>알고리즘 파라미터</h2>
+  <div class="panel coll collapsed" id="paramPanel">
+    <h2><span>알고리즘 파라미터</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
     <div class="params">
       <div class="param"><label>증감률 임계치 (%)</label><input type="number" id="p_change" value="100" step="10" min="0"></div>
       <div class="param"><label>Z-Score 임계치</label><input type="number" id="p_zscore" value="3.0" step="0.1" min="0.1"></div>
@@ -328,8 +337,8 @@
   </div>
 
   <!-- 숫자 컬럼 설정 -->
-  <div class="panel" id="numericPanel">
-    <h2>숫자 컬럼 설정 (범위 검사)</h2>
+  <div class="panel coll collapsed" id="numericPanel">
+    <h2><span>숫자 컬럼 설정 (범위 검사)</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
     <p class="muted">파일을 읽으면 숫자 컬럼이 자동으로 추출됩니다. 허용 최소/최대값을 수정하시고 '사용'을 체크해 주세요.</p>
     <div class="tbl-scroll">
       <table id="numTable" class="num-config">
@@ -345,12 +354,17 @@
   </div>
 
   <!-- ⑤ 결과 저장 -->
-  <div class="panel">
-    <h2><span class="badge">5</span> 결과 저장 (파일명)</h2>
+  <div class="panel coll collapsed" id="savePanel">
+    <h2><span><span class="badge">5</span> 결과 저장 (파일명)</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
     <div class="row">
       <input type="text" id="outName" value="anomaly_result.xlsx" style="min-width:320px;">
       <span class="muted">분석이 끝나면 [결과 다운로드] 버튼으로 Excel 파일을 받으실 수 있습니다.</span>
     </div>
+    <div class="row" style="margin-top:12px;">
+      <button type="button" id="btnClearReview" class="secondary">검토 데이터 전체 삭제</button>
+      <span class="muted">이 브라우저에 저장된 모든 검토 상태·메모(로컬 저장)를 삭제합니다.</span>
+    </div>
+    <div id="clearReviewNote" class="note"></div>
   </div>
 
   <!-- 결과 -->
@@ -377,6 +391,7 @@
     <div id="status" style="margin-bottom: 12px;">파일을 선택해 주시면 분석을 시작할 수 있습니다.</div>
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
     <div id="etaText"></div>
+    <div id="runBanner" class="err-banner hidden" role="alert" aria-live="assertive"></div>
     <div class="runbtns" style="margin-top:12px;">
       <button id="btnRun" style="min-width:200px; padding:12px 20px;">분석 시작</button>
       <button id="btnCancel" class="secondary hidden" style="padding:12px 20px;">분석 취소</button>
@@ -491,6 +506,9 @@
   <p class="muted" style="text-align:center;">
     ※ 모든 처리는 브라우저 내부에서 수행되며 외부로 데이터가 전송되지 않습니다.
   </p>
+  <footer id="appFooter" class="muted" style="text-align:center; margin-top:16px; font-size:12px;">
+    데이터 이상 탐지 도구 · <span id="appVersion"></span>
+  </footer>
 </div>
 
 <script id="engineScript">
@@ -886,7 +904,11 @@ const Detectors = (function () {
   const SPATIAL_MAX = 100000;
   const DIM_MAX = 6;
   const SAMPLE_SIZE = 15000;
-  function progress(ctx, frac, label) { if (ctx.progress) ctx.progress(frac, label); }
+  // 진행 보고 + 취소 확인(청크 지점마다 호출되어 실행 중 검사도 즉시 중단 가능)
+  function progress(ctx, frac, label) {
+    if (typeof ANALYSIS_CANCELLED !== "undefined" && ANALYSIS_CANCELLED) throw new Error("사용자 취소");
+    if (ctx.progress) ctx.progress(frac, label);
+  }
 
   // ⑦ Isolation Forest
   function isolationForest(ctx) {
@@ -1135,7 +1157,13 @@ async function runAnalysis(table, config, onProgress) {
       for (const f of findings) { add(f); if (f.evidence && f.evidence.approx && !approxAlgos.includes(det.name)) approxAlgos.push(det.name); }
       usedAlgos.push(det.name);
     } catch (e) {
-      skipped.push({ name: det.name, message: String((e && e.message) || e) });
+      const msg = String((e && e.message) || e);
+      if (msg === "사용자 취소") {
+        // 실행 중이던 검사가 취소된 경우: 부분 결과(이전 검사)는 보존하고 루프를 중단
+        cancelled = true; skipped.push({ name: det.name, message: "사용자 취소로 건너뜀" });
+        ctx.progress = null; break;
+      }
+      skipped.push({ name: det.name, message: msg });
     }
     ctx.progress = null;
   }
@@ -2148,10 +2176,21 @@ const XlsxWriter = (function () {
 (function () {
   const $ = (id) => document.getElementById(id);
   const FLAG_COL = "이상치 여부", REASON_COL = "이상치 사유";
+  const APP_VERSION = "v2.0", BUILD_DATE = "2026-07-09";
   let table = null, numericConfigs = [], lastResult = null;
+
+  // 푸터 버전 표기(UX-5) + #debug 해시로 디버그 로그 활성화(OPS-2)
+  if ($("appVersion")) $("appVersion").textContent = APP_VERSION + " (" + BUILD_DATE + ")";
+  try { if (location.hash.toLowerCase().indexOf("debug") >= 0) { DEBUG = true; console.log("[DEBUG] 디버그 로그 활성화됨"); } } catch (e) {}
 
   function setStatus(msg) { $("status").textContent = msg; }
   function setProgress(pct) { $("progressBar").style.width = pct + "%"; }
+  // 인라인 오류 배너(alert 대체): 화면 흐름을 끊지 않고 오류를 표시한다.
+  function showBanner(msg) {
+    const b = $("runBanner"); if (!b) { return; }
+    b.textContent = msg; b.classList.remove("hidden");
+  }
+  function clearBanner() { const b = $("runBanner"); if (b) { b.textContent = ""; b.classList.add("hidden"); } }
 
   // ----- 업로드 설정/상태 -----
   const ALLOWED_EXT = ["csv", "xlsx", "xls"];   // xls 는 기존 기능 유지를 위해 포함
@@ -2313,6 +2352,7 @@ const XlsxWriter = (function () {
       " · 숫자 컬럼 " + numericConfigs.length + "개 · 타입: " + typeSummary;
     $("outName").value = currentFileBase + "_result.xlsx";
     $("resultPanel").classList.add("hidden"); lastResult = null;
+    expandOnlyAnalysisOptions();
     if (table.rows.length === 0)
       setStatus("파일을 불러왔지만 분석할 데이터 행이 없습니다. (헤더만 있는 파일입니다)");
     else
@@ -2386,18 +2426,28 @@ const XlsxWriter = (function () {
     }));
   }
 
+  // 수치 파라미터 안전 파싱: 비정상 입력은 기본값·범위로 보정하고 입력창에 반영해 사용자가 인지하게 한다.
+  // (0 도 유효값으로 허용 — 기존 `|| 기본값` 이 0 을 무시하던 문제 제거)
+  function readNum(id, def, lo, hi, isInt) {
+    let v = isInt ? parseInt($(id).value, 10) : parseFloat($(id).value);
+    if (!Number.isFinite(v)) v = def;
+    v = Math.min(hi, Math.max(lo, v));
+    if (isInt) v = Math.round(v);
+    if (String($(id).value) !== String(v)) $(id).value = v;
+    return v;
+  }
   function collectConfig() {
     return {
       missing: $("opt_missing").checked, duplicate: $("opt_duplicate").checked,
       range: $("opt_range").checked, change: $("opt_change").checked,
       iqr: $("opt_iqr").checked, zscore: $("opt_zscore").checked,
       iforest: $("opt_iforest").checked, lof: $("opt_lof").checked, dbscan: $("opt_dbscan").checked,
-      changeRateThreshold: parseFloat($("p_change").value) || 100,
-      zscoreThreshold: parseFloat($("p_zscore").value) || 3,
-      isoContamination: parseFloat($("p_contam").value) || 0.05,
-      lofNeighbors: parseInt($("p_neighbors").value, 10) || 20,
-      dbscanEps: parseFloat($("p_eps").value) || 0.5,
-      dbscanMinSamples: parseInt($("p_minsamples").value, 10) || 5,
+      changeRateThreshold: readNum("p_change", 100, 0, 100000),
+      zscoreThreshold: readNum("p_zscore", 3, 0.1, 20),
+      isoContamination: readNum("p_contam", 0.05, 0.001, 0.5),
+      lofNeighbors: readNum("p_neighbors", 20, 1, 1000, true),
+      dbscanEps: readNum("p_eps", 0.5, 0.01, 1000),
+      dbscanMinSamples: readNum("p_minsamples", 5, 1, 1000, true),
       numericConfigs: numericConfigs,
       missingAllowCols: collectMissingAllowCols(),
     };
@@ -2464,6 +2514,32 @@ const XlsxWriter = (function () {
     .forEach((id) => $(id).addEventListener("change", syncAlgoSettings));
   syncAlgoSettings(); // 초기 로드 시 비활성 상태 반영(미선택 알고리즘의 설정 잠금)
 
+  // ----- UX-1: 접이식 설정 패널 (헤더 클릭으로 펼침/접기) -----
+  document.querySelectorAll(".panel.coll > h2").forEach((h) => {
+    h.setAttribute("role", "button"); h.setAttribute("tabindex", "0");
+    const toggle = () => h.parentElement.classList.toggle("collapsed");
+    h.addEventListener("click", toggle);
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+  });
+  // 보안 잔여-1: 이 브라우저에 저장된 모든 검토 데이터(davReview:*) 삭제
+  $("btnClearReview").addEventListener("click", () => {
+    let removed = 0;
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf("davReview:") === 0) keys.push(k); }
+      keys.forEach((k) => { localStorage.removeItem(k); removed++; });
+      reviewState = {}; reviewKey = "";
+    } catch (e) { $("clearReviewNote").textContent = "저장소에 접근할 수 없어 삭제하지 못했습니다."; return; }
+    $("clearReviewNote").textContent = removed > 0 ? (removed + "개의 검토 데이터를 삭제했습니다.") : "삭제할 검토 데이터가 없습니다.";
+  });
+  // 파일을 불러오면 '분석 옵션'만 펼치고 나머지는 접어 스크롤을 줄인다.
+  function expandOnlyAnalysisOptions() {
+    ["optPanel", "missingAllowPanel", "paramPanel", "numericPanel", "savePanel"].forEach((id) => {
+      const el = $(id); if (el) el.classList.add("collapsed");
+    });
+    const opt = $("optPanel"); if (opt) opt.classList.remove("collapsed");
+  }
+
   // ----- 분석 실행: Web Worker 우선(대용량에서도 화면이 멈추지 않음), 실패 시 메인 스레드 폴백 -----
   let analysisWorker;   // undefined=미시도, false=사용 불가, Worker=사용 가능
   function getAnalysisWorker() {
@@ -2507,6 +2583,28 @@ const XlsxWriter = (function () {
     });
   }
 
+  // ----- 2단계 취소: 1차=정상 취소, 5초 미반응 시 즉시 중단(결과 폐기) -----
+  let cancelEscalateTimer = 0;   // 5초 후 '즉시 중단' 전환 타이머
+  let cancelHardMode = false;    // true면 다음 클릭에서 worker.terminate()
+  function resetCancelButton() {
+    if (cancelEscalateTimer) { clearTimeout(cancelEscalateTimer); cancelEscalateTimer = 0; }
+    cancelHardMode = false;
+    const b = $("btnCancel");
+    b.textContent = "분석 취소"; b.disabled = false; b.classList.remove("danger"); b.classList.add("hidden");
+  }
+  function hardStopAnalysis() {
+    // 워커 강제 종료: 부분 결과 없이 중단하고, 다음 실행 시 워커를 재생성한다.
+    const w = analysisWorker;
+    if (w && typeof w.terminate === "function") { try { w.terminate(); } catch (e) {} }
+    analysisWorker = undefined;       // 다음 getAnalysisWorker()에서 재생성
+    if (cancelEscalateTimer) { clearTimeout(cancelEscalateTimer); cancelEscalateTimer = 0; }
+    cancelHardMode = false;
+    setProgress(0); setStatus("분석을 즉시 중단했습니다. 부분 결과는 저장되지 않았습니다.");
+    $("etaText").textContent = ""; renderSteps("parse");
+    $("btnRun").disabled = false; $("btnRun").classList.remove("hidden");
+    const b = $("btnCancel"); b.textContent = "분석 취소"; b.classList.remove("danger"); b.classList.add("hidden");
+  }
+
   // 분석 시작
   // ===== 카테고리/규칙 라벨 =====
   const CAT_LABEL = { rule: "규칙", stat: "통계", ml: "ML" };
@@ -2526,7 +2624,8 @@ const XlsxWriter = (function () {
     $("steps").innerHTML = STEPS.map((s, i) => {
       let cls = "step";
       if (i < idx) cls += " done"; else if (i === idx) cls += " active";
-      return '<div class="' + cls + '">' + escapeHtml(s[1]) + "</div>";
+      const cur = i === idx ? ' aria-current="step"' : "";
+      return '<div class="' + cls + '"' + cur + ">" + escapeHtml(s[1]) + "</div>";
     }).join("");
   }
   function updateEta(pct) {
@@ -2655,8 +2754,14 @@ const XlsxWriter = (function () {
   function renderHistogram(result, colName) {
     const idx = result.table.columns.indexOf(colName);
     if (idx < 0) { $("histBox").innerHTML = ""; return; }
-    const vals = [];
-    for (let r = 0; r < result.table.rows.length; r++) { const v = Values.toNumber(result.table.rows[r][idx]); if (v !== null) vals.push([r, v]); }
+    // PERF-1: 컬럼별 숫자 배열을 캐시해 히스토그램 컬럼 전환 시 재스캔을 피한다.
+    if (!result._numCache) result._numCache = {};
+    let vals = result._numCache[colName];
+    if (!vals) {
+      vals = [];
+      for (let r = 0; r < result.table.rows.length; r++) { const v = Values.toNumber(result.table.rows[r][idx]); if (v !== null) vals.push([r, v]); }
+      result._numCache[colName] = vals;
+    }
     if (!vals.length) { $("histBox").innerHTML = '<div class="muted">표시할 값이 없습니다.</div>'; return; }
     let mn = Infinity, mx = -Infinity; for (const [, v] of vals) { if (v < mn) mn = v; if (v > mx) mx = v; }
     if (mn === mx) { mx = mn + 1; }
@@ -2708,10 +2813,12 @@ const XlsxWriter = (function () {
 
   // ===== 검토 도구 바 =====
   function renderReviewBar(result) {
+    // 재생성 전 현재 필터 값을 보존한다(일괄 적용 등으로 바가 다시 그려져도 필터 유지).
+    const prevFilter = $("rvFilter") ? $("rvFilter").value : "all";
     const reviewed = Object.keys(reviewState).filter((r) => (reviewState[r].status && reviewState[r].status !== "미검토")).length;
-    const bulk = '<select id="rvBulk">' + RVSTATUS.map((s) => '<option value="' + s + '">' + s + "</option>").join("") + "</select>";
+    const bulk = '<select id="rvBulk" aria-label="일괄 변경할 검토 상태">' + RVSTATUS.map((s) => '<option value="' + s + '">' + s + "</option>").join("") + "</select>";
     const filterOpts = [["all", "전체"], ["anom", "이상만"], ["미검토", "미검토만"], ["확인됨", "확인됨만"], ["오탐", "오탐만"], ["수정 필요", "수정 필요만"]];
-    const filter = '<select id="rvFilter">' + filterOpts.map((o) => '<option value="' + o[0] + '">' + o[1] + "</option>").join("") + "</select>";
+    const filter = '<select id="rvFilter" aria-label="표시 행 필터">' + filterOpts.map((o) => '<option value="' + o[0] + '"' + (o[0] === prevFilter ? " selected" : "") + ">" + o[1] + "</option>").join("") + "</select>";
     $("reviewBar").innerHTML =
       '검토 진행률 <span class="rv-progress">' + reviewed + " / " + result.anomalyCount + "건</span>" +
       ' · 표시 필터 ' + filter +
@@ -2730,7 +2837,8 @@ const XlsxWriter = (function () {
 
   // ===== 실행 =====
   $("btnRun").addEventListener("click", async () => {
-    if (!table) { alert("분석할 파일을 먼저 선택해 주세요."); return; }
+    if (!table) { showBanner("분석할 파일을 먼저 선택해 주세요."); return; }
+    clearBanner();
     $("btnRun").disabled = true; $("btnRun").classList.add("hidden");
     $("btnCancel").classList.remove("hidden"); $("btnCancel").disabled = false;
     setProgress(0); analysisStart = performance.now(); renderSteps("parse"); $("etaText").textContent = "";
@@ -2745,17 +2853,27 @@ const XlsxWriter = (function () {
       prepareReview(lastResult);
       renderResult(lastResult);
       $("resultPanel").classList.remove("hidden");
+      try { $("resultPanel").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { $("resultPanel").scrollIntoView(); }
       if (lastResult.cancelled) setStatus("분석이 취소되었습니다. 아래는 취소 시점까지의 부분 결과입니다.");
     } catch (err) {
-      console.error(err); alert("분석 중 문제가 발생했습니다: " + err.message); setStatus("분석에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+      console.error(err); showBanner("분석 중 문제가 발생했습니다: " + err.message); setStatus("분석에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       $("btnRun").disabled = false; $("btnRun").classList.remove("hidden");
-      $("btnCancel").classList.add("hidden");
+      resetCancelButton();
     }
   });
   $("btnCancel").addEventListener("click", () => {
+    if (cancelHardMode) { hardStopAnalysis(); return; }   // 2차 클릭: 즉시 중단
+    // 1차 클릭: 정상 취소 요청. 5초 내 미반응 시 '즉시 중단'으로 전환한다.
     $("btnCancel").disabled = true; setStatus("분석을 취소하는 중입니다...");
     requestCancelAnalysis();
+    if (cancelEscalateTimer) clearTimeout(cancelEscalateTimer);
+    cancelEscalateTimer = setTimeout(() => {
+      cancelHardMode = true;
+      const b = $("btnCancel");
+      b.textContent = "즉시 중단(결과 폐기)"; b.disabled = false; b.classList.add("danger");
+      setStatus("취소 응답이 지연되고 있습니다. 즉시 중단하면 부분 결과가 폐기됩니다.");
+    }, 5000);
   });
 
   function renderResult(result) {
@@ -2811,10 +2929,10 @@ const XlsxWriter = (function () {
       // 검토 UI(이상 행만)
       let checkCell = "<td></td>", rvCell = "<td></td>", memoCell = "<td></td>";
       if (isAnom) {
-        checkCell = '<td><input type="checkbox" class="rv-check" data-row="' + r + '"></td>';
-        rvCell = '<td><select class="rv-status" data-row="' + r + '">' +
+        checkCell = '<td><input type="checkbox" class="rv-check" data-row="' + r + '" aria-label="' + (r + 1) + '행 검토 선택"></td>';
+        rvCell = '<td><select class="rv-status" data-row="' + r + '" aria-label="' + (r + 1) + '행 검토 상태">' +
           RVSTATUS.map((s) => '<option' + (s === rv.status ? " selected" : "") + ">" + s + "</option>").join("") + "</select></td>";
-        memoCell = '<td><input class="rv-memo" data-row="' + r + '" value="' + escapeHtml(rv.memo || "") + '" placeholder="메모"></td>';
+        memoCell = '<td><input class="rv-memo" data-row="' + r + '" value="' + escapeHtml(rv.memo || "") + '" placeholder="메모" aria-label="' + (r + 1) + '행 검토 메모"></td>';
       }
       const rvClass = (isAnom && rv.status !== "미검토") ? " rv-" + rv.status.replace(/\s/g, "") : "";
       html += "<tr class='" + (isAnom ? "anomaly" : "") + rvClass + "'>" + checkCell + cells +
@@ -3653,12 +3771,20 @@ window.__infoTooltip = InfoTooltip;
     if (!slots.A || !slots.B) return;
     const kaIdx = parseInt($("keyA").value, 10), kbIdx = parseInt($("keyB").value, 10);
     if (isNaN(kaIdx) || isNaN(kbIdx)) { setCmpError("기준 컬럼을 선택해 주세요."); return; }
+    // 수치 파라미터 안전 파싱(비정상 입력은 범위로 보정 후 입력창에 반영)
+    const clampNum = (id, def, lo, hi) => {
+      let v = parseFloat($(id).value);
+      if (!Number.isFinite(v)) v = def;
+      v = Math.min(hi, Math.max(lo, v));
+      if (String($(id).value) !== String(v)) $(id).value = v;
+      return v;
+    };
     const opts = {
       useRate: $("opt_cmp_rate").checked,
       useZ: $("opt_cmp_z").checked,
       useIqr: $("opt_cmp_iqr").checked,
-      ratePct: parseFloat($("p_cmp_rate").value) || 50,
-      zTh: parseFloat($("p_cmp_z").value) || 3,
+      ratePct: clampNum("p_cmp_rate", 50, 1, 100000),
+      zTh: clampNum("p_cmp_z", 3, 0.1, 20),
     };
     $("btnCompare").disabled = true; setCmpError("");
     try {
