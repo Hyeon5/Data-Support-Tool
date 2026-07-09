@@ -14,10 +14,10 @@ await page.click('#btnRun');
 await page.waitForFunction(()=>document.getElementById('status').textContent.includes('완료'),{timeout:15000});
 let pass=0,fail=0; const check=(n,c,d)=>{if(c){pass++;console.log('  ✔',n);}else{fail++;console.log('  ✘',n,'|',d);}};
 
-// (a) 막대 폭 합 = 100%
+// (a) 막대 폭은 최다 건수를 100%로 정규화(텍스트 길이와 무관하게 고정 스케일)
 const widths = await page.$$eval('.bar-fill', els=>els.map(e=>parseFloat(e.style.width)));
-const sum = widths.reduce((a,b)=>a+b,0);
-check('막대 폭 합 ≈ 100% ('+sum.toFixed(1)+'%)', Math.abs(sum-100)<1.5, JSON.stringify(widths));
+const maxW = Math.max(...widths);
+check('최다 사유 막대 = 100% (정규화)', Math.abs(maxW-100)<0.5 && widths.every(w=>w<=100.01), JSON.stringify(widths));
 check('건수+비율 라벨 표기', (await page.$$eval('.bar-row .val .pct', e=>e.length))>=1, '');
 check('바 hover 툴팁(title)', (await page.$eval('.bar-row', e=>e.getAttribute('title')||'')).includes('전체의'), '');
 

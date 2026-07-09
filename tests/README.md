@@ -37,7 +37,9 @@ node tests/samples.mjs      # 개별 실행
 | `rv_cancel.mjs` | 검토 상태 저장/복원 + 분석 취소 엔진 |
 | `fixes2.mjs` | 파라미터 클램프(A-1) · 2단계 취소 버튼(A-2) · 필터 유지(A-3) |
 | `deid.mjs` | 개인정보 비식별 엔진(SHA-256 표준벡터, 유형 추정, 5개 변환) |
-| `deid_ui.mjs` | 비식별 UI 흐름(업로드→탐지표→미리보기→다운로드) |
+| `deid_ui.mjs` | 비식별 UI 흐름(업로드→탐지표→미리보기→다운로드) + 열 순서 |
+| `ui3_changes.mjs` | 접이식 기본 열림/비활성 접힘, 좌측 레일, 히스토그램 줌, 비식별 열 순서 |
+| `xlsx_preserve.mjs` | 원본 xlsx 서식(글꼴·열너비·행높이) 보존 저장 (`fixtures/formatted.xlsx`) |
 | `ui_full.mjs` | 전체 UI 통합 + 외부 네트워크 요청 0건 |
 
 ## 참고

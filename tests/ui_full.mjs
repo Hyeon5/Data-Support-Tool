@@ -19,8 +19,8 @@ await page.check('#opt_iforest');
 await page.click('#btnRun');
 await page.waitForFunction(()=>document.getElementById('status').textContent.includes('완료')||document.getElementById('status').textContent.includes('실패'),{timeout:15000});
 
-console.log('[작업6 스텝/진행]');
-check('스텝 인디케이터 done 표시', (await page.$$eval('#steps .step.done', e=>e.length))>=1, '');
+console.log('[작업6 진행/완료]');
+check('진행률 100% (완료 후)', (await page.$eval('#progressBar', e=>parseFloat(e.style.width)||0))>=100, '');
 check('취소 버튼 숨김(완료 후)', await page.$eval('#btnCancel', e=>e.classList.contains('hidden')), '');
 
 console.log('[작업1 대시보드]');

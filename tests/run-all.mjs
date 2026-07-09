@@ -16,6 +16,8 @@ const suites = [
   'fixes2.mjs',      // A-1 클램프 / A-2 2단계 취소 / A-3 필터 유지
   'deid.mjs',        // 개인정보 비식별 엔진(단위)
   'deid_ui.mjs',     // 개인정보 비식별 UI 흐름
+  'ui3_changes.mjs', // 접이식 기본/비활성 접힘, 레일, 히스토그램 줌, 비식별 열 순서
+  'xlsx_preserve.mjs', // 원본 xlsx 서식 보존 저장
   'ui_full.mjs',     // 전체 UI + 오프라인/네트워크 0
 ];
 
