@@ -168,6 +168,69 @@
   .chg.miss{ background:#E8EAF0; border-color:#c9d0dc; }
   .chg.type{ background:#EDE7F6; border-color:#cfc2e8; }
   .tag-anom{ color:#b23c17; font-weight:700; font-size:12px; }
+
+  /* ===== 작업5: 파스텔 팔레트(연한 배경 + 진한 검정 글자, WCAG AA) ===== */
+  /* 규칙=살구, 통계=하늘, ML=라벤더. 글자색은 항상 #1a1a1a 고정 */
+  .cat-badge{
+    display:inline-block; border-radius:4px; padding:1px 7px; margin:1px 3px 1px 0;
+    font-size:11px; font-weight:700; color:#1a1a1a; border:1px solid transparent; white-space:nowrap;
+  }
+  .cat-badge.rule{ background:#FDEBD0; border-color:#F5CBA7; }
+  .cat-badge.stat{ background:#D6EAF8; border-color:#AED6F1; }
+  .cat-badge.ml{ background:#E8DAEF; border-color:#D2B4DE; }
+  /* 셀 단위 하이라이트(문제 위치를 행 안에서 즉시 식별) */
+  td.hl-rule{ background:#FDF2E3; }
+  td.hl-stat{ background:#EBF5FB; }
+  td.hl-ml{ background:#F4EDF7; }
+  #resultTable td, #resultTable th{ color:#1a1a1a; }
+  /* 판정 근거 셀 */
+  .reason-cell{ font-size:12px; }
+  .reason-cell .ev{ display:block; color:#1a1a1a; margin-top:2px; }
+  .reason-item{ cursor:help; border-bottom:1px dotted #9aa5b1; }
+
+  /* ===== 작업1: 결과 요약 대시보드 ===== */
+  .dash{ border:1px solid var(--line); border-radius:10px; margin-bottom:14px; overflow:hidden; }
+  .dash-head{ display:flex; align-items:center; justify-content:space-between; padding:10px 14px;
+    background:#EBF5FB; cursor:pointer; color:#1a1a1a; font-weight:700; }
+  .dash-head .approx-badge{ background:#FCF3CF; border:1px solid #f5e6a8; color:#1a1a1a;
+    border-radius:4px; padding:1px 8px; font-size:11px; font-weight:700; margin-left:8px; }
+  .dash-body{ padding:14px; }
+  .dash-cards{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  @media (max-width:820px){ .dash-cards{ grid-template-columns:repeat(2,1fr); } }
+  .dash-card{ border:1px solid var(--line); border-radius:8px; padding:12px; background:#fff; }
+  .dash-card h4{ margin:0 0 8px; font-size:12.5px; color:#42505f; }
+  .dash-card .big{ font-size:24px; font-weight:800; color:#1a1a1a; }
+  .dash-card .sub{ font-size:12px; color:#5a6b7b; margin-top:3px; }
+  .dash-card .line{ display:flex; justify-content:space-between; font-size:12.5px; color:#1a1a1a; margin-top:3px; }
+  .dash-viz{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:14px; }
+  @media (max-width:820px){ .dash-viz{ grid-template-columns:1fr; } }
+  .viz-box{ border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .viz-box h4{ margin:0 0 8px; font-size:12.5px; color:#42505f; display:flex; justify-content:space-between; align-items:center; }
+  .bar-row{ display:flex; align-items:center; gap:8px; margin:4px 0; font-size:12px; color:#1a1a1a; }
+  .bar-row .lbl{ flex:0 0 130px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-track{ flex:1; background:#eef2f7; border-radius:4px; height:16px; position:relative; }
+  .bar-fill{ height:100%; border-radius:4px; }
+  .bar-row .val{ flex:0 0 auto; font-weight:700; }
+  .viz-box select{ font-size:12px; }
+
+  /* ===== 작업6: 스텝 인디케이터 + 진행 UX ===== */
+  .steps{ display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; }
+  .step{ flex:1; min-width:90px; text-align:center; font-size:12px; padding:7px 6px; border-radius:6px;
+    background:#EAECEE; color:#5a6b7b; border:1px solid #dfe3e8; }
+  .step.active{ background:#D6EAF8; border-color:#AED6F1; color:#1a1a1a; font-weight:700; }
+  .step.done{ background:#D5F5E3; border-color:#aee3c3; color:#1a1a1a; }
+  #etaText{ font-size:12px; color:#5a6b7b; margin-top:6px; text-align:center; }
+  .runbtns{ display:flex; gap:10px; justify-content:center; }
+
+  /* ===== 작업3: 검토 워크플로우 ===== */
+  .review-bar{ display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:8px 0; font-size:13px; color:#1a1a1a; }
+  .review-bar select, .review-bar input{ font-size:12.5px; }
+  .rv-progress{ font-weight:700; }
+  select.rv-status{ border-radius:4px; padding:2px 4px; border:1px solid var(--line); font-size:12px; color:#1a1a1a; }
+  tr.rv-확인됨 td{ background:#D5F5E3 !important; }
+  tr.rv-오탐 td{ background:#EAECEE !important; }
+  tr.rv-수정필요 td{ background:#FCF3CF !important; }
+  .rv-memo{ width:110px; border:1px solid var(--line); border-radius:4px; padding:2px 4px; font-size:12px; }
 </style>
 </head>
 <body>
@@ -289,7 +352,7 @@
   <!-- 결과 -->
   <div class="panel hidden" id="resultPanel">
     <h2>분석 결과</h2>
-    <div class="summary" id="summary"></div>
+    <div id="dashboard"></div>
     <div id="skipNote" class="dz-error hidden" role="alert"></div>
     <div class="row" style="margin-bottom:10px;">
       <button id="btnDownload">결과 다운로드 (Excel)</button>
@@ -297,6 +360,7 @@
         <input type="checkbox" id="onlyAnomaly"> 미리보기에 이상 행만 표시
       </label>
     </div>
+    <div class="review-bar" id="reviewBar"></div>
     <div class="tbl-scroll">
       <table id="resultTable"><thead></thead><tbody></tbody></table>
     </div>
@@ -305,10 +369,13 @@
 
   <!-- ③④ 실행 / 진행률 -->
   <div class="panel runbar">
-    <div id="status" style="margin-bottom: 20px;">파일을 선택해 주시면 분석을 시작할 수 있습니다.</div>
+    <div class="steps" id="steps"></div>
+    <div id="status" style="margin-bottom: 12px;">파일을 선택해 주시면 분석을 시작할 수 있습니다.</div>
     <div class="progress-outer"><div class="progress-inner" id="progressBar"></div></div>
-    <div class="row" style="margin-top:12px; justify-content:center;">
+    <div id="etaText"></div>
+    <div class="runbtns" style="margin-top:12px;">
       <button id="btnRun" style="min-width:200px; padding:12px 20px;">분석 시작</button>
+      <button id="btnCancel" class="secondary hidden" style="padding:12px 20px;">분석 취소</button>
     </div>
   </div>
 
@@ -426,6 +493,8 @@
 "use strict";
 // 배포 시 false 유지. true 로 바꾸면 LOF/DBSCAN 의 처리 행 수·소요 시간을 콘솔에 출력한다.
 var DEBUG = false;
+// 분석 취소 플래그(검사 사이에서 확인). 메인/워커 각 컨텍스트에서 설정된다.
+var ANALYSIS_CANCELLED = false;
 /* =====================================================================
  * 분석 엔진 (순수 계산 코드)
  *
@@ -1019,6 +1088,7 @@ async function runAnalysis(table, config, onProgress) {
   const t0 = Date.now();
   const sleep = () => new Promise(r => setTimeout(r, 0));
   const report = (pct, msg, extra) => onProgress(pct, msg, extra || {});
+  ANALYSIS_CANCELLED = false; // 새 분석 시작 시 취소 플래그 초기화
   report(2, "컬럼 타입 분석 중...", { stage: "parse" });
   const infos = ColumnAnalyzer.analyze(table);
   const numericColumns = ColumnAnalyzer.numericColumns(infos);
@@ -1046,7 +1116,10 @@ async function runAnalysis(table, config, onProgress) {
 
   const detectors = Detectors.active(config);
   const skipped = [], approxAlgos = [], usedAlgos = [];
+  let cancelled = false;
   for (let i = 0; i < detectors.length; i++) {
+    // 취소 요청 시 여기까지의 결과로 집계(검사 사이에서 안전하게 중단)
+    if (typeof ANALYSIS_CANCELLED !== "undefined" && ANALYSIS_CANCELLED) { cancelled = true; break; }
     const det = detectors[i];
     const base = Math.round((i / detectors.length) * 90) + 5;
     const span = 90 / detectors.length;
@@ -1070,13 +1143,14 @@ async function runAnalysis(table, config, onProgress) {
     if (fr) { flags.push("이상"); reasons.push(fr.map(f => f.reason).join(", ")); findings.push(fr); }
     else { flags.push(""); reasons.push(""); findings.push(null); }
   }
-  report(100, "분석이 완료되었습니다.", { stage: "done" });
-  return { table, infos, flags, reasons, findings, skipped, approxAlgos, usedAlgos, elapsedMs: Date.now() - t0, anomalyCount: flags.filter(f => f).length };
+  report(100, cancelled ? "분석이 취소되었습니다(부분 결과)." : "분석이 완료되었습니다.", { stage: "done" });
+  return { table, infos, flags, reasons, findings, skipped, approxAlgos, usedAlgos, cancelled, elapsedMs: Date.now() - t0, anomalyCount: flags.filter(f => f).length };
 }
 
 /* ---- Web Worker 진입점 ---- */
 if (typeof importScripts === "function") {
   self.onmessage = async (e) => {
+    if (e.data && e.data.type === "cancel") { ANALYSIS_CANCELLED = true; return; }
     const { columns, rows, config } = e.data;
     try {
       const result = await runAnalysis({ columns, rows }, config,
@@ -1084,7 +1158,7 @@ if (typeof importScripts === "function") {
       self.postMessage({
         type: "done", flags: result.flags, reasons: result.reasons, findings: result.findings,
         skipped: result.skipped, approxAlgos: result.approxAlgos, usedAlgos: result.usedAlgos,
-        elapsedMs: result.elapsedMs, anomalyCount: result.anomalyCount, infos: result.infos,
+        cancelled: result.cancelled, elapsedMs: result.elapsedMs, anomalyCount: result.anomalyCount, infos: result.infos,
       });
     } catch (err) {
       self.postMessage({ type: "error", message: String((err && err.message) || err) });
@@ -2403,10 +2477,16 @@ const XlsxWriter = (function () {
     }
     return analysisWorker;
   }
+  // 분석 취소 요청: 워커에는 cancel 메시지, 메인 스레드에는 전역 플래그로 전달한다.
+  function requestCancelAnalysis() {
+    try { ANALYSIS_CANCELLED = true; } catch (e) { /* 무시 */ }
+    const w = analysisWorker;
+    if (w && typeof w.postMessage === "function") w.postMessage({ type: "cancel" });
+  }
   /** 워커(가능 시) 또는 메인 스레드에서 분석을 실행한다. */
   function runAnalysisAsync(tbl, config, onProgress) {
     const w = getAnalysisWorker();
-    if (!w) return runAnalysis(tbl, config, onProgress); // 폴백
+    if (!w) { try { ANALYSIS_CANCELLED = false; } catch (e) {} return runAnalysis(tbl, config, onProgress); } // 폴백
     return new Promise((resolve, reject) => {
       w.onmessage = (e) => {
         const m = e.data;
@@ -2414,7 +2494,7 @@ const XlsxWriter = (function () {
         else if (m.type === "done") resolve({
           table: tbl, flags: m.flags, reasons: m.reasons, findings: m.findings,
           skipped: m.skipped, approxAlgos: m.approxAlgos, usedAlgos: m.usedAlgos,
-          elapsedMs: m.elapsedMs, anomalyCount: m.anomalyCount, infos: m.infos,
+          cancelled: m.cancelled, elapsedMs: m.elapsedMs, anomalyCount: m.anomalyCount, infos: m.infos,
         });
         else if (m.type === "error") reject(new Error(m.message));
       };
@@ -2424,73 +2504,329 @@ const XlsxWriter = (function () {
   }
 
   // 분석 시작
+  // ===== 카테고리/규칙 라벨 =====
+  const CAT_LABEL = { rule: "규칙", stat: "통계", ml: "ML" };
+  const RULE_LABEL = {
+    missing: "결측치", duplicate: "중복", range: "범위 초과", change: "증감률",
+    format: "형식 오류", iqr: "IQR", zscore: "Z-Score",
+    isoforest: "Isolation Forest", lof: "LOF", dbscan: "DBSCAN",
+  };
+  const RVSTATUS = ["미검토", "확인됨", "오탐", "수정 필요"];
+
+  // ===== 작업6: 스텝 인디케이터 + ETA =====
+  const STEPS = [["parse", "파싱"], ["rule", "규칙 검사"], ["stat", "통계 분석"], ["ml", "ML 분석"], ["aggregate", "집계"]];
+  let analysisStart = 0;
+  function renderSteps(stage) {
+    const order = STEPS.map(s => s[0]);
+    const idx = stage === "done" ? STEPS.length : order.indexOf(stage);
+    $("steps").innerHTML = STEPS.map((s, i) => {
+      let cls = "step";
+      if (i < idx) cls += " done"; else if (i === idx) cls += " active";
+      return '<div class="' + cls + '">' + escapeHtml(s[1]) + "</div>";
+    }).join("");
+  }
+  function updateEta(pct) {
+    if (pct <= 3 || pct >= 100) { $("etaText").textContent = ""; return; }
+    const el = (performance.now() - analysisStart) / 1000;
+    const remain = el * (100 - pct) / pct;
+    $("etaText").textContent = "예상 남은 시간 약 " + (remain < 60 ? Math.max(1, Math.ceil(remain)) + "초" : Math.ceil(remain / 60) + "분");
+  }
+
+  // ===== 작업3: 검토 상태 (localStorage 저장/복원) =====
+  let reviewState = {};   // row(정수) -> {status, memo}
+  let reviewKey = "";
+  function reviewStorageKey(result) {
+    return "davReview:" + (currentFileBase || "file") + "|" + result.table.rows.length + "x" + result.table.columns.length;
+  }
+  function saveReview() {
+    try { localStorage.setItem(reviewKey, JSON.stringify(reviewState)); } catch (e) { /* 저장소 불가 시 무시 */ }
+  }
+  function prepareReview(result) {
+    reviewKey = reviewStorageKey(result);
+    reviewState = {};
+    let saved = null;
+    try { saved = localStorage.getItem(reviewKey); } catch (e) { saved = null; }
+    if (saved) {
+      let restore = false;
+      try { restore = window.confirm("이 파일에 대한 이전 검토 상태가 있습니다. 불러올까요?"); } catch (e) { restore = false; }
+      if (restore) { try { reviewState = JSON.parse(saved) || {}; } catch (e) { reviewState = {}; } }
+      else { try { localStorage.removeItem(reviewKey); } catch (e) {} }
+    }
+  }
+  function getRv(r) { return reviewState[r] || { status: "미검토", memo: "" }; }
+  function setRvStatus(r, status) { const rv = getRv(r); rv.status = status; reviewState[r] = rv; saveReview(); }
+  function setRvMemo(r, memo) { const rv = getRv(r); rv.memo = memo; reviewState[r] = rv; saveReview(); }
+
+  // ===== 작업1: 대시보드 =====
+  function computeDashboard(result) {
+    const total = result.table.rows.length, anom = result.anomalyCount;
+    const catCount = { rule: 0, stat: 0, ml: 0 };
+    const ruleCount = {}, colCount = {};
+    (result.findings || []).forEach((fs) => {
+      if (!fs) return;
+      fs.forEach((f) => {
+        catCount[f.category] = (catCount[f.category] || 0) + 1;
+        const rl = RULE_LABEL[f.rule] || f.rule;
+        ruleCount[rl] = (ruleCount[rl] || 0) + 1;
+        if (f.column) colCount[f.column] = (colCount[f.column] || 0) + 1;
+      });
+    });
+    const topCols = Object.keys(colCount).map(k => [k, colCount[k]]).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const ruleBars = Object.keys(ruleCount).map(k => [k, ruleCount[k]]).sort((a, b) => b[1] - a[1]);
+    return { total, anom, catCount, ruleBars, topCols };
+  }
+
+  function renderDashboard(result) {
+    const d = computeDashboard(result);
+    const pct = d.total ? (d.anom / d.total * 100) : 0;
+    const approx = (result.approxAlgos || []);
+    const approxBadge = approx.length ? '<span class="approx-badge">근사 모드: ' + escapeHtml(approx.join(", ")) + "</span>" : "";
+    const secs = ((result.elapsedMs || 0) / 1000);
+    const usedAlgos = (result.usedAlgos || []);
+
+    // 카드 4종
+    const card1 = '<div class="dash-card"><h4>이상치 현황</h4>' +
+      '<div class="big">' + d.anom.toLocaleString() + "</div>" +
+      '<div class="sub">전체 ' + d.total.toLocaleString() + "행 중 이상 " + pct.toFixed(1) + "%</div></div>";
+    const card2 = '<div class="dash-card"><h4>카테고리별 건수</h4>' +
+      '<div class="line"><span><span class="cat-badge rule">규칙</span></span><b>' + d.catCount.rule + "</b></div>" +
+      '<div class="line"><span><span class="cat-badge stat">통계</span></span><b>' + d.catCount.stat + "</b></div>" +
+      '<div class="line"><span><span class="cat-badge ml">ML</span></span><b>' + d.catCount.ml + "</b></div></div>";
+    const topHtml = d.topCols.length
+      ? d.topCols.map((c, i) => '<div class="line"><span>' + (i + 1) + ". " + escapeHtml(c[0]) + "</span><b>" + c[1] + "건</b></div>").join("")
+      : '<div class="sub">컬럼 단위 이상치가 없습니다.</div>';
+    const card3 = '<div class="dash-card"><h4>이상치 최다 컬럼 Top 3</h4>' + topHtml + "</div>";
+    const card4 = '<div class="dash-card"><h4>분석 정보</h4>' +
+      '<div class="big" style="font-size:18px">' + secs.toFixed(secs < 10 ? 2 : 1) + "초</div>" +
+      '<div class="sub">사용 알고리즘: ' + (usedAlgos.length ? escapeHtml(usedAlgos.join(", ")) : "-") + "</div></div>";
+
+    // 사유별 가로 막대(인라인, 라이브러리 없음). 카테고리 색으로 채움.
+    const maxV = d.ruleBars.reduce((m, b) => Math.max(m, b[1]), 1);
+    const ruleCatOf = {}; // 라벨 -> 카테고리(색)
+    (result.findings || []).forEach((fs) => { if (fs) fs.forEach((f) => { ruleCatOf[RULE_LABEL[f.rule] || f.rule] = f.category; }); });
+    const barColor = { rule: "#F5CBA7", stat: "#AED6F1", ml: "#D2B4DE" };
+    const bars = d.ruleBars.length ? d.ruleBars.map((b) => {
+      const w = (b[1] / maxV * 100).toFixed(1);
+      const col = barColor[ruleCatOf[b[0]] || "rule"] || "#F5CBA7";
+      return '<div class="bar-row"><span class="lbl">' + escapeHtml(b[0]) + '</span>' +
+        '<span class="bar-track"><span class="bar-fill" style="width:' + w + "%;background:" + col + '"></span></span>' +
+        '<span class="val">' + b[1] + "</span></div>";
+    }).join("") : '<div class="sub">표시할 사유가 없습니다.</div>';
+
+    // 히스토그램용 숫자 컬럼 옵션
+    const numCols = (result.infos || []).filter((i) => i.type === "Number").map((i) => i.name);
+    const histSel = numCols.length
+      ? '<select id="histCol">' + numCols.map((c) => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + "</option>").join("") + "</select>"
+      : '<span class="muted">숫자 컬럼 없음</span>';
+
+    $("dashboard").innerHTML =
+      '<div class="dash"><div class="dash-head" id="dashHead"><span>📊 분석 결과 요약' + approxBadge + '</span><span id="dashToggle">▼ 접기</span></div>' +
+      '<div class="dash-body" id="dashBody">' +
+      '<div class="dash-cards">' + card1 + card2 + card3 + card4 + "</div>" +
+      '<div class="dash-viz">' +
+      '<div class="viz-box"><h4>사유별 이상치 건수</h4>' + bars + "</div>" +
+      '<div class="viz-box"><h4><span>컬럼 분포 + 이상치 위치</span>' + histSel + '</h4><div id="histBox"></div></div>' +
+      "</div></div></div>";
+
+    // 접기/펼치기
+    $("dashHead").addEventListener("click", () => {
+      const b = $("dashBody"), t = $("dashToggle");
+      const hidden = b.classList.toggle("hidden");
+      t.textContent = hidden ? "▶ 펼치기" : "▼ 접기";
+    });
+    if (numCols.length) {
+      const draw = () => renderHistogram(result, $("histCol").value);
+      $("histCol").addEventListener("change", draw);
+      draw();
+    }
+  }
+
+  // 인라인 SVG 히스토그램 + 이상치 위치 표시(외부 라이브러리 없음)
+  function renderHistogram(result, colName) {
+    const idx = result.table.columns.indexOf(colName);
+    if (idx < 0) { $("histBox").innerHTML = ""; return; }
+    const vals = [];
+    for (let r = 0; r < result.table.rows.length; r++) { const v = Values.toNumber(result.table.rows[r][idx]); if (v !== null) vals.push([r, v]); }
+    if (!vals.length) { $("histBox").innerHTML = '<div class="muted">표시할 값이 없습니다.</div>'; return; }
+    let mn = Infinity, mx = -Infinity; for (const [, v] of vals) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    if (mn === mx) { mx = mn + 1; }
+    const BINS = 24, W = 320, H = 120, PAD = 4;
+    const counts = new Array(BINS).fill(0);
+    const binOf = (v) => Math.min(BINS - 1, Math.floor((v - mn) / (mx - mn) * BINS));
+    for (const [, v] of vals) counts[binOf(v)]++;
+    const maxC = counts.reduce((m, c) => Math.max(m, c), 1);
+    // 이 컬럼에서 이상으로 판정된 행 집합
+    const anomRows = new Set();
+    (result.findings || []).forEach((fs, r) => { if (fs && fs.some((f) => f.column === colName)) anomRows.add(r); });
+    const bw = (W - PAD * 2) / BINS;
+    let svg = '<svg viewBox="0 0 ' + W + " " + (H + 22) + '" width="100%" style="max-width:360px" role="img" aria-label="' + escapeHtml(colName) + ' 분포">';
+    for (let b = 0; b < BINS; b++) {
+      const h = counts[b] / maxC * H;
+      svg += '<rect x="' + (PAD + b * bw + 0.5) + '" y="' + (H - h) + '" width="' + (bw - 1) + '" height="' + h + '" fill="#AED6F1"/>';
+    }
+    // 이상치 위치를 축 아래 살구색 삼각형으로 표시
+    for (const r of anomRows) {
+      const v = Values.toNumber(result.table.rows[r][idx]); if (v === null) continue;
+      const x = PAD + (v - mn) / (mx - mn) * (W - PAD * 2);
+      svg += '<polygon points="' + x + "," + (H + 2) + " " + (x - 3) + "," + (H + 9) + " " + (x + 3) + "," + (H + 9) + '" fill="#E67E22"/>';
+    }
+    svg += '<line x1="' + PAD + '" y1="' + H + '" x2="' + (W - PAD) + '" y2="' + H + '" stroke="#c9d0dc"/>';
+    svg += '<text x="' + PAD + '" y="' + (H + 20) + '" font-size="10" fill="#5a6b7b">' + escapeHtml(Values.fmtNum(Math.round(mn * 100) / 100)) + "</text>";
+    svg += '<text x="' + (W - PAD) + '" y="' + (H + 20) + '" font-size="10" fill="#5a6b7b" text-anchor="end">' + escapeHtml(Values.fmtNum(Math.round(mx * 100) / 100)) + "</text>";
+    svg += "</svg><div class='muted' style='font-size:11px'>▲ 살구색 표식 = 이상치 위치 (" + anomRows.size + "건)</div>";
+    $("histBox").innerHTML = svg;
+  }
+
+  // ===== 검토 도구 바 =====
+  function renderReviewBar(result) {
+    const reviewed = Object.keys(reviewState).filter((r) => (reviewState[r].status && reviewState[r].status !== "미검토")).length;
+    const bulk = '<select id="rvBulk">' + RVSTATUS.map((s) => '<option value="' + s + '">' + s + "</option>").join("") + "</select>";
+    const filterOpts = [["all", "전체"], ["anom", "이상만"], ["미검토", "미검토만"], ["확인됨", "확인됨만"], ["오탐", "오탐만"], ["수정 필요", "수정 필요만"]];
+    const filter = '<select id="rvFilter">' + filterOpts.map((o) => '<option value="' + o[0] + '">' + o[1] + "</option>").join("") + "</select>";
+    $("reviewBar").innerHTML =
+      '검토 진행률 <span class="rv-progress">' + reviewed + " / " + result.anomalyCount + "건</span>" +
+      ' · 표시 필터 ' + filter +
+      ' · 일괄 변경 ' + bulk + ' <button id="rvApply" class="secondary">선택 행에 적용</button>' +
+      ' <label style="display:inline-flex;align-items:center;gap:4px"><input type="checkbox" id="rvSelectAll"> 표시된 이상 행 전체선택</label>';
+    $("rvFilter").addEventListener("change", () => renderPreview(result));
+    $("rvApply").addEventListener("click", () => {
+      const st = $("rvBulk").value;
+      document.querySelectorAll("#resultTable .rv-check:checked").forEach((cb) => setRvStatus(parseInt(cb.dataset.row, 10), st));
+      renderResult(result);
+    });
+    $("rvSelectAll").addEventListener("change", (e) => {
+      document.querySelectorAll("#resultTable .rv-check").forEach((cb) => { cb.checked = e.target.checked; });
+    });
+  }
+
+  // ===== 실행 =====
   $("btnRun").addEventListener("click", async () => {
     if (!table) { alert("분석할 파일을 먼저 선택해 주세요."); return; }
-    $("btnRun").disabled = true; setProgress(0);
+    $("btnRun").disabled = true; $("btnRun").classList.add("hidden");
+    $("btnCancel").classList.remove("hidden"); $("btnCancel").disabled = false;
+    setProgress(0); analysisStart = performance.now(); renderSteps("parse"); $("etaText").textContent = "";
     try {
       const config = collectConfig();
-      lastResult = await runAnalysisAsync(table, config, (pct, msg) => { setProgress(pct); setStatus(msg); });
+      lastResult = await runAnalysisAsync(table, config, (pct, msg, extra) => {
+        setProgress(pct); setStatus(msg);
+        if (extra && extra.stage && extra.stage !== "done") renderSteps(extra.stage);
+        updateEta(pct);
+      });
+      renderSteps("done"); $("etaText").textContent = "";
+      prepareReview(lastResult);
       renderResult(lastResult);
       $("resultPanel").classList.remove("hidden");
+      if (lastResult.cancelled) setStatus("분석이 취소되었습니다. 아래는 취소 시점까지의 부분 결과입니다.");
     } catch (err) {
       console.error(err); alert("분석 중 문제가 발생했습니다: " + err.message); setStatus("분석에 실패했습니다. 잠시 후 다시 시도해 주세요.");
-    } finally { $("btnRun").disabled = false; }
+    } finally {
+      $("btnRun").disabled = false; $("btnRun").classList.remove("hidden");
+      $("btnCancel").classList.add("hidden");
+    }
+  });
+  $("btnCancel").addEventListener("click", () => {
+    $("btnCancel").disabled = true; setStatus("분석을 취소하는 중입니다...");
+    requestCancelAnalysis();
   });
 
   function renderResult(result) {
-    const total = result.table.rows.length, anom = result.anomalyCount;
-    $("summary").innerHTML =
-      '<div class="stat"><b>' + total + '</b>전체 행</div>' +
-      '<div class="stat"><b style="color:#b23c17">' + anom + '</b>이상 행</div>' +
-      '<div class="stat"><b style="color:#2e7d32">' + (total - anom) + '</b>정상 행</div>';
-    // 수행되지 못한 검사가 있으면 사용자에게 분명하게 알린다.
+    renderDashboard(result);
     const skipped = result.skipped || [];
     if (skipped.length) {
       $("skipNote").innerHTML = "⚠ 아래 검사는 수행되지 못했습니다.<br>" +
         skipped.map((s) => "· " + escapeHtml(s.name) + ": " + escapeHtml(s.message)).join("<br>");
       $("skipNote").classList.remove("hidden");
-    } else {
-      $("skipNote").classList.add("hidden"); $("skipNote").textContent = "";
-    }
+    } else { $("skipNote").classList.add("hidden"); $("skipNote").textContent = ""; }
+    renderReviewBar(result);
     renderPreview(result);
   }
 
   function renderPreview(result) {
     const onlyAnom = $("onlyAnomaly").checked;
-    const MAX_COLS = 40; // 열이 아주 많은 파일도 미리보기가 느려지지 않도록 상한
+    const rvFilter = $("rvFilter") ? $("rvFilter").value : "all";
+    const MAX_COLS = 40;
     const srcCols = result.table.columns;
     const colCut = srcCols.length > MAX_COLS;
     const useCols = colCut ? srcCols.slice(0, MAX_COLS) : srcCols;
-    const cols = useCols.concat(colCut ? ["…"] : []).concat([FLAG_COL, REASON_COL]);
+    const cols = ["선택"].concat(useCols).concat(colCut ? ["…"] : []).concat([FLAG_COL, REASON_COL, "검토", "메모"]);
     const thead = $("resultTable").querySelector("thead");
     const tbody = $("resultTable").querySelector("tbody");
-    thead.innerHTML = "<tr>" + cols.map(c => "<th>" + escapeHtml(c) + "</th>").join("") + "</tr>";
-    let html = "", shown = 0; const LIMIT = 300;
+    thead.innerHTML = "<tr>" + cols.map((c) => "<th>" + escapeHtml(c) + "</th>").join("") + "</tr>";
+    let html = "", shown = 0, matched = 0; const LIMIT = 300;
     for (let r = 0; r < result.table.rows.length; r++) {
       const isAnom = result.flags[r] === "이상";
+      const rv = getRv(r);
       if (onlyAnom && !isAnom) continue;
-      if (shown >= LIMIT) break;
+      if (rvFilter === "anom" && !isAnom) continue;
+      if (rvFilter !== "all" && rvFilter !== "anom") { if (!isAnom || rv.status !== rvFilter) continue; }
+      matched++;
+      if (shown >= LIMIT) continue;
       shown++;
+      // 컬럼 -> 카테고리(셀 하이라이트)
+      const colCat = {};
+      if (result.findings[r]) result.findings[r].forEach((f) => { if (f.column && !colCat[f.column]) colCat[f.column] = f.category; });
       const rowVals = colCut ? result.table.rows[r].slice(0, MAX_COLS) : result.table.rows[r];
-      const cells = rowVals.map(v => "<td>" + escapeHtml(Values.cellText(v)) + "</td>").join("")
-        + (colCut ? "<td>…</td>" : "");
-      html += "<tr class='" + (isAnom ? "anomaly" : "") + "'>" + cells +
-        "<td>" + result.flags[r] + "</td><td>" + escapeHtml(result.reasons[r]) + "</td></tr>";
+      let cells = rowVals.map((v, ci) => {
+        const cn = useCols[ci];
+        const hl = colCat[cn] ? " class='hl-" + colCat[cn] + "'" : "";
+        return "<td" + hl + ">" + escapeHtml(Values.cellText(v)) + "</td>";
+      }).join("") + (colCut ? "<td>…</td>" : "");
+      // 사유 셀: 카테고리 배지 + 근거 툴팁
+      let reasonHtml = "";
+      if (isAnom && result.findings[r]) {
+        reasonHtml = result.findings[r].map((f) =>
+          '<span class="cat-badge ' + f.category + '">' + escapeHtml(CAT_LABEL[f.category] || "") + "</span>" +
+          '<span class="reason-item" title="' + escapeHtml(f.evidenceText) + '">' + escapeHtml(f.reason) + "</span>"
+        ).join('<span class="ev"></span>');
+      } else { reasonHtml = escapeHtml(result.reasons[r]); }
+      // 검토 UI(이상 행만)
+      let checkCell = "<td></td>", rvCell = "<td></td>", memoCell = "<td></td>";
+      if (isAnom) {
+        checkCell = '<td><input type="checkbox" class="rv-check" data-row="' + r + '"></td>';
+        rvCell = '<td><select class="rv-status" data-row="' + r + '">' +
+          RVSTATUS.map((s) => '<option' + (s === rv.status ? " selected" : "") + ">" + s + "</option>").join("") + "</select></td>";
+        memoCell = '<td><input class="rv-memo" data-row="' + r + '" value="' + escapeHtml(rv.memo || "") + '" placeholder="메모"></td>';
+      }
+      const rvClass = (isAnom && rv.status !== "미검토") ? " rv-" + rv.status.replace(/\s/g, "") : "";
+      html += "<tr class='" + (isAnom ? "anomaly" : "") + rvClass + "'>" + checkCell + cells +
+        "<td>" + result.flags[r] + '</td><td class="reason-cell">' + reasonHtml + "</td>" + rvCell + memoCell + "</tr>";
     }
     tbody.innerHTML = html || '<tr><td colspan="' + cols.length + '" class="muted">표시할 행이 없습니다.</td></tr>';
-    const totalShown = onlyAnom ? result.anomalyCount : result.table.rows.length;
+    // 검토 이벤트 바인딩
+    tbody.querySelectorAll(".rv-status").forEach((sel) => sel.addEventListener("change", (e) => {
+      setRvStatus(parseInt(e.target.dataset.row, 10), e.target.value);
+      renderReviewBar(result);
+      const tr = e.target.closest("tr");
+      if (tr) { tr.className = tr.className.replace(/rv-\S+/g, ""); if (e.target.value !== "미검토") tr.classList.add("rv-" + e.target.value.replace(/\s/g, "")); }
+    }));
+    tbody.querySelectorAll(".rv-memo").forEach((inp) => inp.addEventListener("change", (e) => setRvMemo(parseInt(e.target.dataset.row, 10), e.target.value)));
+    const totalShown = onlyAnom || rvFilter !== "all" ? matched : result.table.rows.length;
     $("previewNote").textContent = "미리보기: " + shown + " / " + totalShown + " 행 표시" +
-      (totalShown > LIMIT ? " (다운로드 파일에는 전체가 포함됩니다)" : "") +
-      (colCut ? " · 열은 " + MAX_COLS + "개까지만 미리보기로 표시됩니다(파일에는 전체 포함)" : "");
+      (matched > LIMIT ? " (상위 " + LIMIT + "행까지만 표시, 다운로드 파일에는 전체 포함)" : "") +
+      (colCut ? " · 열은 " + MAX_COLS + "개까지만 미리보기 표시(파일에는 전체 포함)" : "");
   }
   $("onlyAnomaly").addEventListener("change", () => { if (lastResult) renderPreview(lastResult); });
 
   function escapeHtml(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 
-  // 결과 다운로드
+  // 결과 다운로드 (판정 근거 + 검토 상태/메모 컬럼 포함)
   $("btnDownload").addEventListener("click", () => {
     if (!lastResult) return;
-    const bytes = XlsxWriter.build(lastResult, FLAG_COL, REASON_COL);
+    const res = lastResult;
+    const EV_COL = "판정 근거", RVS_COL = "검토 상태", RVM_COL = "검토 메모";
+    const cols = res.table.columns.concat([FLAG_COL, REASON_COL, EV_COL, RVS_COL, RVM_COL]);
+    const rows = res.table.rows.map((r, i) => {
+      const ev = res.findings[i] ? res.findings[i].map((f) => f.evidenceText).join(" | ") : "";
+      const rv = getRv(i);
+      return r.concat([res.flags[i], res.reasons[i], ev, res.flags[i] ? rv.status : "", res.flags[i] ? (rv.memo || "") : ""]);
+    });
+    const slots = res.flags.map((f) => (f === "이상" ? 1 : 0));
+    const anomRows = [], anomSlots = [];
+    for (let i = 0; i < rows.length; i++) if (res.flags[i] === "이상") { anomRows.push(rows[i]); anomSlots.push(1); }
+    const bytes = XlsxWriter.buildWorkbook([
+      { name: "Result", columns: cols, rows: rows, fillSlots: slots },
+      { name: "Anomaly", columns: cols, rows: anomRows, fillSlots: anomSlots },
+    ]);
     let name = $("outName").value.trim() || "anomaly_result.xlsx";
     if (!/\.xlsx$/i.test(name)) name += ".xlsx";
     const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
