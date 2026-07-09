@@ -424,6 +424,8 @@
 
 <script id="engineScript">
 "use strict";
+// 배포 시 false 유지. true 로 바꾸면 LOF/DBSCAN 의 처리 행 수·소요 시간을 콘솔에 출력한다.
+var DEBUG = false;
 /* =====================================================================
  * 분석 엔진 (순수 계산 코드)
  *
@@ -540,10 +542,14 @@ const ColumnAnalyzer = (function () {
  * ===================================================================== */
 const Detectors = (function () {
   const F = Values.fmtNum;
+  const R2 = (x) => Math.round(x * 100) / 100;
+  const DUP_SEP = String.fromCharCode(1); // 데이터에 없는 제어문자 구분자
+  function mk(row, category, rule, column, reason, evidence, evidenceText) {
+    return { row, category, rule, column: column || null, reason, evidence: evidence || {}, evidenceText: evidenceText || reason };
+  }
 
   // ① 결측치
   function missing(ctx) {
-    // 결측 허용 컬럼: 사용자가 체크한 컬럼은 결측값이 있어도 정상으로 처리한다.
     const allow = new Set(ctx.config.missingAllowCols || []);
     const out = [];
     for (let r = 0; r < ctx.table.rows.length; r++) {
@@ -551,23 +557,27 @@ const Detectors = (function () {
       ctx.table.columns.forEach((c, i) => {
         if (!allow.has(c) && Values.isMissing(ctx.table.rows[r][i])) cols.push(c);
       });
-      if (cols.length) out.push({ row: r, reason: "결측치 [" + cols.join(", ") + "]" });
+      if (cols.length) out.push(mk(r, "rule", "missing", cols[0], "결측치 [" + cols.join(", ") + "]",
+        { columns: cols }, "결측 컬럼: " + cols.join(", ")));
     }
     return out;
   }
 
-  // ② 중복 데이터 (모든 컬럼 값이 동일한 행)
+  // ② 중복 데이터
   function duplicate(ctx) {
-    const seen = new Map(); const groups = new Map();
+    const groups = new Map();
     for (let r = 0; r < ctx.table.rows.length; r++) {
-      // 구분자: 데이터에 나타날 수 없는 제어문자(U+0001). 반드시 이스케이프 표기로 유지할 것.
-      const key = ctx.table.rows[r].map(Values.cellText).join("\u0001");
+      const key = ctx.table.rows[r].map(Values.cellText).join(DUP_SEP);
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(r);
     }
     const out = [];
     for (const rowsIdx of groups.values())
-      if (rowsIdx.length > 1) rowsIdx.forEach(r => out.push({ row: r, reason: "중복 데이터" }));
+      if (rowsIdx.length > 1) {
+        const others = rowsIdx.length - 1;
+        rowsIdx.forEach(r => out.push(mk(r, "rule", "duplicate", null, "중복 데이터",
+          { groupSize: rowsIdx.length }, "다른 " + others + "개 행과 모든 값이 동일합니다.")));
+      }
     return out;
   }
 
@@ -580,13 +590,16 @@ const Detectors = (function () {
       for (let r = 0; r < col.length; r++) {
         const v = col[r]; if (v === null) continue;
         if (v < cfg.allowMin || v > cfg.allowMax)
-          out.push({ row: r, reason: "범위 초과 [" + cfg.name + "] (허용:" + F(cfg.allowMin) + "~" + F(cfg.allowMax) + ", 실제:" + F(v) + ")" });
+          out.push(mk(r, "rule", "range", cfg.name,
+            "범위 초과 [" + cfg.name + "] (허용:" + F(cfg.allowMin) + "~" + F(cfg.allowMax) + ", 실제:" + F(v) + ")",
+            { value: v, allowMin: cfg.allowMin, allowMax: cfg.allowMax },
+            "값 " + F(v) + " → 허용 범위 " + F(cfg.allowMin) + "~" + F(cfg.allowMax) + " " + (v > cfg.allowMax ? "상한 초과" : "하한 미만")));
       }
     }
     return out;
   }
 
-  // ④ 증감률 검사 (이전 행 대비)
+  // ④ 증감률 검사
   function changeRate(ctx) {
     const out = []; const th = ctx.config.changeRateThreshold;
     for (const name of ctx.numericColumns) {
@@ -596,7 +609,11 @@ const Detectors = (function () {
         if (cur === null) { prev = null; continue; }
         if (prev !== null && prev !== 0) {
           const ch = (cur - prev) / Math.abs(prev) * 100;
-          if (Math.abs(ch) > th) out.push({ row: r, reason: "증감률 이상 [" + name + "] (" + (ch >= 0 ? "+" : "-") + F(Math.abs(ch)) + "%)" });
+          if (Math.abs(ch) > th)
+            out.push(mk(r, "rule", "change", name,
+              "증감률 이상 [" + name + "] (" + (ch >= 0 ? "+" : "-") + F(Math.abs(ch)) + "%)",
+              { prev: prev, cur: cur, pct: ch, threshold: th },
+              "이전 값 " + F(prev) + " → 현재 " + F(cur) + " (" + (ch >= 0 ? "+" : "-") + F(R2(Math.abs(ch))) + "%, 임계치 ±" + F(th) + "% 초과)"));
         }
         prev = cur;
       }
@@ -615,7 +632,14 @@ const Detectors = (function () {
       const q1 = q(0.25), q3 = q(0.75), iqrv = q3 - q1;
       if (iqrv === 0) continue;
       const lower = q1 - 1.5 * iqrv, upper = q3 + 1.5 * iqrv;
-      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; if (v < lower || v > upper) out.push({ row: r, reason: "IQR 이상 [" + name + "]" }); }
+      for (let r = 0; r < col.length; r++) {
+        const v = col[r]; if (v === null) continue;
+        if (v < lower || v > upper)
+          out.push(mk(r, "stat", "iqr", name, "IQR 이상 [" + name + "]",
+            { value: v, q1: q1, q3: q3, iqr: iqrv, lower: lower, upper: upper },
+            "값 " + F(R2(v)) + " → Q1=" + F(R2(q1)) + ", Q3=" + F(R2(q3)) + ", IQR=" + F(R2(iqrv)) + ", " +
+            (v > upper ? "상한 " + F(R2(upper)) + " 초과" : "하한 " + F(R2(lower)) + " 미만")));
+      }
     }
     return out;
   }
@@ -630,12 +654,19 @@ const Detectors = (function () {
       const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
       const std = Math.sqrt(vals.reduce((a, b) => a + (b - mean) * (b - mean), 0) / vals.length);
       if (std === 0) continue;
-      for (let r = 0; r < col.length; r++) { const v = col[r]; if (v === null) continue; const z = (v - mean) / std; if (Math.abs(z) > th) out.push({ row: r, reason: "Z-Score 이상 [" + name + "] (Z=" + F(Math.round(Math.abs(z) * 100) / 100) + ")" }); }
+      for (let r = 0; r < col.length; r++) {
+        const v = col[r]; if (v === null) continue;
+        const z = (v - mean) / std;
+        if (Math.abs(z) > th)
+          out.push(mk(r, "stat", "zscore", name, "Z-Score 이상 [" + name + "] (Z=" + F(R2(Math.abs(z))) + ")",
+            { value: v, mean: mean, std: std, z: z, threshold: th },
+            "값 " + F(R2(v)) + " → 평균 " + F(R2(mean)) + ", 표준편차 " + F(R2(std)) + ", Z-Score " + F(R2(Math.abs(z))) + " (임계치 " + F(th) + " 초과)"));
+      }
     }
     return out;
   }
 
-  // --- 머신러닝 공통: 특징 행렬(표준화 옵션) ---
+  // --- 머신러닝 공통 ---
   function featureMatrix(ctx, standardize) {
     const cols = ctx.numericColumns;
     if (!cols.length) return { X: [], pos: [] };
@@ -655,9 +686,134 @@ const Detectors = (function () {
     return { X, pos };
   }
   function dist(a, b) { let s = 0; for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
-
-  // 재현성 있는 난수 (mulberry32)
   function rng(seed) { return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  function gridCellSize(X, dim, n) {
+    const mn = new Float64Array(dim).fill(Infinity), mx = new Float64Array(dim).fill(-Infinity);
+    for (let i = 0; i < n; i++) { const p = X[i]; for (let j = 0; j < dim; j++) { if (p[j] < mn[j]) mn[j] = p[j]; if (p[j] > mx[j]) mx[j] = p[j]; } }
+    let maxExt = 0; for (let j = 0; j < dim; j++) maxExt = Math.max(maxExt, mx[j] - mn[j]);
+    const G = Math.max(1, Math.round(Math.pow(n, 1 / dim)));
+    return maxExt > 0 ? maxExt / G : 1;
+  }
+
+  // ---- 균일 그리드 공간 인덱스: 정확한 eps-이웃 / k-최근접(브루트포스와 동일 결과) ----
+  function SpatialGrid(X, dim, h) {
+    const n = X.length;
+    const mn = new Float64Array(dim).fill(Infinity);
+    for (let i = 0; i < n; i++) { const p = X[i]; for (let j = 0; j < dim; j++) if (p[j] < mn[j]) mn[j] = p[j]; }
+    if (!(h > 0)) h = 1;
+    const coord = new Array(n);
+    const cells = new Map();
+    for (let i = 0; i < n; i++) {
+      const p = X[i], c = new Int32Array(dim);
+      for (let j = 0; j < dim; j++) c[j] = Math.floor((p[j] - mn[j]) / h);
+      coord[i] = c;
+      const key = c.join(",");
+      let b = cells.get(key); if (!b) { b = []; cells.set(key, b); }
+      b.push(i);
+    }
+    function coordOf(x) { const c = new Int32Array(dim); for (let j = 0; j < dim; j++) c[j] = Math.floor((x[j] - mn[j]) / h); return c; }
+    // 중심 c 로부터 Chebyshev 거리가 정확히 r 인 셀들을 콜백
+    function forRing(c, r, cb) {
+      const off = new Int32Array(dim);
+      (function rec(d) {
+        if (d === dim) {
+          let mx = 0; for (let j = 0; j < dim; j++) { const a = off[j] < 0 ? -off[j] : off[j]; if (a > mx) mx = a; }
+          if (mx !== r) return;
+          const key = new Array(dim); for (let j = 0; j < dim; j++) key[j] = c[j] + off[j];
+          const b = cells.get(key.join(",")); if (b) cb(b);
+          return;
+        }
+        for (let v = -r; v <= r; v++) { off[d] = v; rec(d + 1); }
+      })(0);
+    }
+    // 좌표 x 기준 eps 이내(excl 제외)
+    function rangeByCoord(x, c, eps, maxRing, excl) {
+      const R = maxRing != null ? maxRing : (Math.ceil(eps / h) + 1);
+      const res = [];
+      for (let r = 0; r <= R; r++) forRing(c, r, (b) => {
+        for (const j of b) { if (j === excl) continue; if (dist(x, X[j]) <= eps) res.push(j); }
+      });
+      return res;
+    }
+    // 좌표 x 기준 정확한 k-최근접(excl 제외). 크기 k 정렬 배열에 삽입만 하여
+    // 링마다 재정렬하지 않는다. ring*h >= k번째 거리 이면 중단(브루트포스와 동일 결과).
+    function knnByCoord(x, c, k, excl) {
+      const bd = new Float64Array(k).fill(Infinity);
+      const bi = new Int32Array(k).fill(-1);
+      let count = 0;
+      const consider = (j, d) => {
+        if (d >= bd[k - 1]) return;
+        let p = k - 1;
+        while (p > 0 && bd[p - 1] > d) { bd[p] = bd[p - 1]; bi[p] = bi[p - 1]; p--; }
+        bd[p] = d; bi[p] = j; if (count < k) count++;
+      };
+      let r = 0;
+      const rMax = 100000;
+      while (r <= rMax) {
+        forRing(c, r, (b) => { for (const j of b) { if (j === excl) continue; consider(j, dist(x, X[j])); } });
+        if (count >= k && r * h >= bd[k - 1]) break;
+        r++;
+      }
+      const res = [];
+      for (let m = 0; m < k && bi[m] >= 0; m++) res.push([bi[m], bd[m]]);
+      return res;
+    }
+    // 좌표 x 기준 eps 이내 점 개수(cap 도달 시 조기 종료)
+    function countByCoord(x, c, eps, maxRing, cap) {
+      const R = maxRing != null ? maxRing : (Math.ceil(eps / h) + 1);
+      let cnt = 0, stop = false;
+      for (let r = 0; r <= R && !stop; r++) forRing(c, r, (b) => {
+        for (const j of b) { if (dist(x, X[j]) <= eps) { if (++cnt >= cap) { stop = true; return; } } }
+      });
+      return cnt;
+    }
+    return {
+      n,
+      knn: (i, k) => knnByCoord(X[i], coord[i], k, i),
+      rangeQuery: (i, eps, maxRing) => rangeByCoord(X[i], coord[i], eps, maxRing, i),
+      knnPoint: (x, k) => knnByCoord(x, coordOf(x), k, -1),
+      rangePoint: (x, eps, maxRing) => rangeByCoord(x, coordOf(x), eps, maxRing, -1),
+      countPoint: (x, eps, maxRing, cap) => countByCoord(x, coordOf(x), eps, maxRing, cap),
+    };
+  }
+
+  // 층화 표본: 그리드 셀에서 비율에 맞춰 표본 추출(밀도 구조 보존)
+  function stratifiedSample(X, dim, size, seed) {
+    const n = X.length;
+    if (n <= size) return X.map((_, i) => i);
+    const h = gridCellSize(X, dim, n);
+    const mn = new Float64Array(dim).fill(Infinity);
+    for (let i = 0; i < n; i++) { const p = X[i]; for (let j = 0; j < dim; j++) if (p[j] < mn[j]) mn[j] = p[j]; }
+    const cells = new Map();
+    for (let i = 0; i < n; i++) {
+      let key = ""; for (let j = 0; j < dim; j++) key += Math.floor((X[i][j] - mn[j]) / h) + ",";
+      let b = cells.get(key); if (!b) { b = []; cells.set(key, b); } b.push(i);
+    }
+    const rand = rng(seed || 7);
+    const frac = size / n, picked = [];
+    // 셀별 비례 추출(min-1 강제 없음): 희소 셀은 자연스럽게 제외되어
+    // 전역 스케일(n/m) 밀도 근사가 유효해진다.
+    for (const b of cells.values()) {
+      const take = Math.round(b.length * frac);
+      if (take <= 0) continue;
+      for (let a = b.length - 1; a > 0; a--) { const t = Math.floor(rand() * (a + 1)); const tmp = b[a]; b[a] = b[t]; b[t] = tmp; }
+      for (let a = 0; a < Math.min(take, b.length); a++) picked.push(b[a]);
+    }
+    // 층화 결과가 너무 작으면 균일 무작위 표본으로 보완
+    if (picked.length < Math.min(size, n) * 0.5) {
+      const all = X.map((_, i) => i);
+      for (let a = all.length - 1; a > 0; a--) { const t = Math.floor(rand() * (a + 1)); const tmp = all[a]; all[a] = all[t]; all[t] = tmp; }
+      return all.slice(0, Math.min(size, n));
+    }
+    return picked;
+  }
+
+  const BRUTE_MAX = 3000;
+  const SPATIAL_MAX = 100000;
+  const DIM_MAX = 6;
+  const SAMPLE_SIZE = 15000;
+  function progress(ctx, frac, label) { if (ctx.progress) ctx.progress(frac, label); }
 
   // ⑦ Isolation Forest
   function isolationForest(ctx) {
@@ -668,7 +824,6 @@ const Detectors = (function () {
     const nTrees = 100, psi = Math.min(256, n);
     const heightLimit = Math.ceil(Math.log2(psi));
     const c = (m) => m > 2 ? 2 * (Math.log(m - 1) + 0.5772156649) - 2 * (m - 1) / m : (m === 2 ? 1 : 0);
-
     function buildTree(idxs, depth) {
       if (depth >= heightLimit || idxs.length <= 1) return { size: idxs.length, ext: true };
       const q = Math.floor(rand() * dim);
@@ -689,112 +844,182 @@ const Detectors = (function () {
       const sample = [];
       for (let k = 0; k < psi; k++) sample.push(Math.floor(rand() * n));
       trees.push(buildTree(sample, 0));
+      if ((t & 15) === 0) progress(ctx, 0.5 * t / nTrees, "트리 생성 중");
     }
     const cPsi = c(psi) || 1;
-    const scores = X.map(x => { let sum = 0; for (const tr of trees) sum += pathLen(x, tr, 0); return Math.pow(2, -(sum / nTrees) / cPsi); });
+    const scores = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let sum = 0; for (const tr of trees) sum += pathLen(X[i], tr, 0);
+      scores[i] = Math.pow(2, -(sum / nTrees) / cPsi);
+      if ((i & 8191) === 0) progress(ctx, 0.5 + 0.5 * i / n, "점수 계산 중");
+    }
     const k = Math.max(1, Math.round(ctx.config.isoContamination * n));
-    const threshold = scores.slice().sort((a, b) => b - a)[Math.min(k, n) - 1];
+    const threshold = Array.from(scores).sort((a, b) => b - a)[Math.min(k, n) - 1];
     const out = [];
-    for (let i = 0; i < n; i++) if (scores[i] >= threshold) out.push({ row: pos[i], reason: "Isolation Forest 이상" });
+    for (let i = 0; i < n; i++) if (scores[i] >= threshold) out.push(mk(pos[i], "ml", "isoforest", null, "Isolation Forest 이상",
+      { score: scores[i], threshold: threshold, contamination: ctx.config.isoContamination },
+      "이상치 점수 " + F(R2(scores[i])) + " (임계 " + F(R2(threshold)) + " 이상, 상위 " + F(R2(ctx.config.isoContamination * 100)) + "%)"));
     return out;
   }
 
-  // 거리 기반 알고리즘의 행 수 상한: O(n²) 계산이 브라우저를 멈추게 하지 않도록 한다.
-  function checkRowLimit(ctx, n, algoName) {
-    const limit = ctx.config.mlRowLimit || 20000;
-    if (n > limit)
-      throw new Error("데이터가 " + limit.toLocaleString() + "행을 넘어 " + algoName +
-        " 검사를 건너뛰었습니다(현재 " + n.toLocaleString() + "행). 데이터를 나누어 다시 시도해 주세요.");
-  }
-
-  // ⑧ LOF — 전체 거리 행렬을 만들지 않고 k-최근접 이웃만 유지한다(메모리 O(n·k)).
-  function lof(ctx) {
-    const { X, pos } = featureMatrix(ctx, true);
-    const n = X.length; if (n < 2) return [];
-    checkRowLimit(ctx, n, "LOF");
-    const k = Math.min(ctx.config.lofNeighbors, n - 1); if (k < 1) return [];
-    const neigh = new Array(n), neighDist = new Array(n), kdist = new Float64Array(n);
+  // LOF 핵심(이웃 제공자 knnFn 로 브루트/그리드 공용)
+  function lofScores(X, k, knnFn) {
+    const n = X.length;
+    const neighIdx = new Array(n), neighDist = new Array(n), kdist = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      // 크기 k 의 정렬 배열에 삽입하며 k-최근접만 유지
-      const idxs = new Int32Array(k).fill(-1);
-      const ds = new Float64Array(k).fill(Infinity);
-      for (let j = 0; j < n; j++) {
-        if (j === i) continue;
-        const d = dist(X[i], X[j]);
-        if (d < ds[k - 1]) {
-          let p = k - 1;
-          while (p > 0 && ds[p - 1] > d) { ds[p] = ds[p - 1]; idxs[p] = idxs[p - 1]; p--; }
-          ds[p] = d; idxs[p] = j;
-        }
-      }
-      neigh[i] = idxs; neighDist[i] = ds; kdist[i] = ds[k - 1];
+      const kn = knnFn(i, k);
+      neighIdx[i] = kn.map(e => e[0]); neighDist[i] = kn.map(e => e[1]);
+      kdist[i] = kn.length ? kn[kn.length - 1][1] : 0;
     }
     const lrd = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      let sum = 0;
-      for (let m = 0; m < k; m++) sum += Math.max(kdist[neigh[i][m]], neighDist[i][m]);
-      lrd[i] = sum === 0 ? Infinity : k / sum;
+      let sum = 0; const ni = neighIdx[i];
+      for (let m = 0; m < ni.length; m++) sum += Math.max(kdist[ni[m]], neighDist[i][m]);
+      lrd[i] = sum === 0 ? Infinity : ni.length / sum;
     }
-    const out = [];
+    const lof = new Float64Array(n);
     for (let i = 0; i < n; i++) {
-      let sum = 0;
-      for (let m = 0; m < k; m++) sum += lrd[neigh[i][m]];
-      const lofv = (lrd[i] === Infinity) ? 1 : (sum / k) / lrd[i];
-      if (lofv > 1.5) out.push({ row: pos[i], reason: "LOF 이상" });
+      let sum = 0; const ni = neighIdx[i];
+      for (let m = 0; m < ni.length; m++) sum += lrd[ni[m]];
+      lof[i] = (lrd[i] === Infinity || ni.length === 0) ? 1 : (sum / ni.length) / lrd[i];
     }
+    return { lof, lrd, kdist };
+  }
+
+  // ⑧ LOF
+  function lof(ctx) {
+    const t0 = Date.now();
+    const { X, pos } = featureMatrix(ctx, true);
+    const n = X.length; if (n < 2) return [];
+    const dim = X[0].length;
+    const k = Math.min(ctx.config.lofNeighbors, n - 1); if (k < 1) return [];
+    const force = ctx.config.mlForce;
+    let approx = false, lofv;
+
+    if (force !== "grid" && (force === "brute" || n <= BRUTE_MAX || dim > DIM_MAX)) {
+      const bruteKnn = (i, kk) => {
+        const arr = [];
+        for (let j = 0; j < n; j++) { if (j === i) continue; arr.push([j, dist(X[i], X[j])]); }
+        arr.sort((a, b) => a[1] - b[1]); return arr.slice(0, kk);
+      };
+      lofv = lofScores(X, k, bruteKnn).lof;
+    } else if (force === "grid" || (n <= SPATIAL_MAX && dim <= DIM_MAX)) {
+      const grid = SpatialGrid(X, dim, gridCellSize(X, dim, n));
+      let done = 0;
+      lofv = lofScores(X, k, (i, kk) => { if ((++done & 4095) === 0) progress(ctx, done / n, "이웃 탐색 중"); return grid.knn(i, kk); }).lof;
+    } else {
+      approx = true;
+      const sIdx = stratifiedSample(X, dim, SAMPLE_SIZE, 42);
+      const S = sIdx.map(i => X[i]); const m = S.length;
+      const sGrid = SpatialGrid(S, dim, gridCellSize(S, dim, m));
+      const sk = Math.min(k, m - 1);
+      const sc = lofScores(S, sk, (i, kk) => sGrid.knn(i, kk));
+      lofv = new Float64Array(n);
+      for (let i = 0; i < n; i++) {
+        const near = sGrid.knnPoint(X[i], sk); // 표본 내 k-최근접
+        let reach = 0; for (const [sj, d] of near) reach += Math.max(sc.kdist[sj], d);
+        const lrdP = reach === 0 ? Infinity : near.length / reach;
+        let sum = 0; for (const [sj] of near) sum += sc.lrd[sj];
+        lofv[i] = (lrdP === Infinity || near.length === 0) ? 1 : (sum / near.length) / lrdP;
+        if ((i & 8191) === 0) progress(ctx, i / n, "표본 기준 스코어링 중");
+      }
+    }
+    if (typeof DEBUG !== "undefined" && DEBUG) console.log("[LOF]", n, "행", approx ? "근사" : "정확", (Date.now() - t0) + "ms");
+    const out = [];
+    for (let i = 0; i < n; i++) if (lofv[i] > 1.5) out.push(mk(pos[i], "ml", "lof", null, "LOF 이상",
+      { score: lofv[i], threshold: 1.5, approx: approx },
+      "LOF 점수 " + F(R2(lofv[i])) + " (임계 1.5 초과)" + (approx ? " · 근사 모드" : "")));
     return out;
   }
 
   // ⑨ DBSCAN
   function dbscan(ctx) {
+    const t0 = Date.now();
     const { X, pos } = featureMatrix(ctx, true);
     const n = X.length; if (n < 1) return [];
-    checkRowLimit(ctx, n, "DBSCAN");
+    const dim = X[0].length;
     const eps = ctx.config.dbscanEps, minPts = ctx.config.dbscanMinSamples;
-    const neighbors = (i) => { const res = []; for (let j = 0; j < n; j++) if (dist(X[i], X[j]) <= eps) res.push(j); return res; };
-    const labels = new Int32Array(n).fill(-2); // -2 미방문, -1 노이즈, >=0 군집
-    let cid = 0;
-    for (let i = 0; i < n; i++) {
-      if (labels[i] !== -2) continue;
-      const nb = neighbors(i);
-      if (nb.length < minPts) { labels[i] = -1; continue; }
-      labels[i] = cid;
-      const queue = nb.slice();
-      for (let qi = 0; qi < queue.length; qi++) {
-        const j = queue[qi];
-        if (labels[j] === -1) labels[j] = cid;
-        if (labels[j] !== -2) continue;
-        labels[j] = cid;
-        const nb2 = neighbors(j);
-        if (nb2.length >= minPts) for (const x of nb2) queue.push(x);
+    const force = ctx.config.mlForce;
+    let approx = false, labels;
+
+    function runDbscan(m, neighborsFn) {
+      const lab = new Int32Array(m).fill(-2);
+      const inq = new Uint8Array(m); // 큐 중복 삽입 방지(성능). 노이즈 판정 결과는 동일.
+      let cid = 0;
+      for (let i = 0; i < m; i++) {
+        if (lab[i] !== -2) continue;
+        if ((i & 4095) === 0) progress(ctx, i / m, "군집 탐색 중");
+        const nb = neighborsFn(i);
+        if (nb.length < minPts) { lab[i] = -1; continue; }
+        lab[i] = cid;
+        const queue = [];
+        for (const j of nb) if (!inq[j]) { inq[j] = 1; queue.push(j); }
+        for (let qi = 0; qi < queue.length; qi++) {
+          const j = queue[qi];
+          if (lab[j] === -1) lab[j] = cid;
+          if (lab[j] !== -2) continue;
+          lab[j] = cid;
+          const nb2 = neighborsFn(j);
+          if (nb2.length >= minPts) for (const x of nb2) if (!inq[x]) { inq[x] = 1; queue.push(x); }
+        }
+        cid++;
       }
-      cid++;
+      return lab;
     }
+
+    if (force !== "grid" && (force === "brute" || n <= BRUTE_MAX || dim > DIM_MAX)) {
+      const neighbors = (i) => { const res = []; for (let j = 0; j < n; j++) if (dist(X[i], X[j]) <= eps) res.push(j); return res; };
+      labels = runDbscan(n, neighbors);
+    } else if (force === "grid" || (n <= SPATIAL_MAX && dim <= DIM_MAX)) {
+      const grid = SpatialGrid(X, dim, eps); // h=eps → ring 0~1 로 정확
+      // 표준 DBSCAN 은 이웃 집합에 자기 자신을 포함하므로 self 를 더해 브루트포스와 일치시킨다.
+      labels = runDbscan(n, (i) => { const r = grid.rangeQuery(i, eps, 1); r.push(i); return r; });
+    } else {
+      // 층화 표본으로 밀도를 추정: 표본 내 eps-이웃 수 × (전체/표본) 이 minPts 이상이면
+      // 군집(정상), 아니면 노이즈(이상). cap 도달 시 조기 종료해 대용량에서도 빠르다.
+      approx = true;
+      const sIdx = stratifiedSample(X, dim, SAMPLE_SIZE, 42);
+      const S = sIdx.map(i => X[i]); const m = S.length;
+      const scale = n / m;
+      const sGrid = SpatialGrid(S, dim, eps);
+      const cap = Math.max(1, Math.ceil(minPts / scale));
+      labels = new Int32Array(n);
+      for (let i = 0; i < n; i++) {
+        labels[i] = sGrid.countPoint(X[i], eps, 1, cap) >= cap ? 0 : -1;
+        if ((i & 8191) === 0) progress(ctx, i / n, "표본 기준 분류 중");
+      }
+    }
+    if (typeof DEBUG !== "undefined" && DEBUG) console.log("[DBSCAN]", n, "행", approx ? "근사" : "정확", (Date.now() - t0) + "ms");
     const out = [];
-    for (let i = 0; i < n; i++) if (labels[i] === -1) out.push({ row: pos[i], reason: "DBSCAN 이상" });
+    for (let i = 0; i < n; i++) if (labels[i] === -1) out.push(mk(pos[i], "ml", "dbscan", null, "DBSCAN 이상",
+      { eps: eps, minSamples: minPts, approx: approx },
+      "어느 군집에도 속하지 않는 노이즈 (eps=" + F(eps) + ", min_samples=" + minPts + ")" + (approx ? " · 근사 모드" : "")));
     return out;
   }
 
-  // 활성화된 detector 목록 (순서 = 사유 나열 순서)
+  const CAT_LABEL = { rule: "규칙", stat: "통계", ml: "ML" };
+
   function active(config) {
     const reg = [
-      [config.missing, "결측치", missing], [config.duplicate, "중복 데이터", duplicate],
-      [config.range, "범위 초과", range], [config.change, "증감률 이상", changeRate],
-      [config.iqr, "IQR", iqr], [config.zscore, "Z-Score", zscore],
-      [config.iforest, "Isolation Forest", isolationForest],
-      [config.lof, "LOF", lof], [config.dbscan, "DBSCAN", dbscan],
+      [config.missing, "결측치", "rule", missing], [config.duplicate, "중복 데이터", "rule", duplicate],
+      [config.range, "범위 초과", "rule", range], [config.change, "증감률 이상", "rule", changeRate],
+      [config.iqr, "IQR", "stat", iqr], [config.zscore, "Z-Score", "stat", zscore],
+      [config.iforest, "Isolation Forest", "ml", isolationForest],
+      [config.lof, "LOF", "ml", lof], [config.dbscan, "DBSCAN", "ml", dbscan],
     ];
-    return reg.filter(x => x[0]).map(x => ({ name: x[1], fn: x[2] }));
+    return reg.filter(x => x[0]).map(x => ({ name: x[1], cat: x[2], fn: x[3] }));
   }
-  return { active };
+  return { active, CAT_LABEL, _internal: { SpatialGrid, gridCellSize, featureMatrix, dist, lofScores } };
 })();
 
 /* =====================================================================
- * 6. 분석 오케스트레이션 (진행률 콜백 + UI 양보를 위한 비동기)
+ * 6. 분석 오케스트레이션 (스테이지/청크 진행률 + 구조화된 판정 근거)
  * ===================================================================== */
 async function runAnalysis(table, config, onProgress) {
+  const t0 = Date.now();
   const sleep = () => new Promise(r => setTimeout(r, 0));
-  onProgress(2, "컬럼 타입 분석 중...");
+  const report = (pct, msg, extra) => onProgress(pct, msg, extra || {});
+  report(2, "컬럼 타입 분석 중...", { stage: "parse" });
   const infos = ColumnAnalyzer.analyze(table);
   const numericColumns = ColumnAnalyzer.numericColumns(infos);
   const numericFrame = {};
@@ -804,61 +1029,62 @@ async function runAnalysis(table, config, onProgress) {
   }
   const ctx = { table, numericColumns, numericFrame, config };
 
-  const reasonsByRow = new Map();
-  const addReason = (row, reason) => {
-    if (!reasonsByRow.has(row)) reasonsByRow.set(row, []);
-    reasonsByRow.get(row).push(reason);
-  };
+  const findingsByRow = new Map();
+  const add = (f) => { if (!findingsByRow.has(f.row)) findingsByRow.set(f.row, []); findingsByRow.get(f.row).push(f); };
 
-  // 숫자 컬럼 형식 오류(항상 수행): 값이 있는데 숫자가 아닌 셀은
-  // 결측/숫자 검사 어디에도 걸리지 않는 사각지대이므로 별도로 표시한다.
+  // 형식 오류(항상 수행): 숫자 컬럼에 섞인 비숫자 값
   for (const name of numericColumns) {
     const idx = table.columns.indexOf(name);
     for (let r = 0; r < table.rows.length; r++) {
       const raw = table.rows[r][idx];
       if (!Values.isMissing(raw) && Values.toNumber(raw) === null) {
-        let text = Values.cellText(raw);
-        if (text.length > 20) text = text.slice(0, 20) + "…";
-        addReason(r, "형식 오류 [" + name + "] (값:" + text + ")");
+        let text = Values.cellText(raw); if (text.length > 20) text = text.slice(0, 20) + "…";
+        add({ row: r, category: "rule", rule: "format", column: name, reason: "형식 오류 [" + name + "] (값:" + text + ")", evidence: { value: text }, evidenceText: "숫자 컬럼에 숫자가 아닌 값: " + text });
       }
     }
   }
 
   const detectors = Detectors.active(config);
-  const skipped = [];
+  const skipped = [], approxAlgos = [], usedAlgos = [];
   for (let i = 0; i < detectors.length; i++) {
-    onProgress(Math.round((i / detectors.length) * 90) + 5, detectors[i].name + " 분석 중...");
+    const det = detectors[i];
+    const base = Math.round((i / detectors.length) * 90) + 5;
+    const span = 90 / detectors.length;
+    report(base, det.name + " 분석 중...", { stage: det.cat, algo: det.name, subPct: 0 });
+    ctx.progress = (frac, label) => report(Math.round(base + frac * span), det.name + (label ? " · " + label : ""), { stage: det.cat, algo: det.name, subPct: Math.round(frac * 100) });
     await sleep();
     try {
-      const findings = detectors[i].fn(ctx);
-      for (const f of findings) addReason(f.row, f.reason);
+      const findings = det.fn(ctx);
+      for (const f of findings) { add(f); if (f.evidence && f.evidence.approx && !approxAlgos.includes(det.name)) approxAlgos.push(det.name); }
+      usedAlgos.push(det.name);
     } catch (e) {
-      // 한 알고리즘의 실패가 전체 분석을 막지 않도록 기록만 하고 계속 진행한다.
-      skipped.push({ name: detectors[i].name, message: String((e && e.message) || e) });
+      skipped.push({ name: det.name, message: String((e && e.message) || e) });
     }
+    ctx.progress = null;
   }
-  onProgress(96, "결과 집계 중...");
+  report(96, "결과 집계 중...", { stage: "aggregate" });
   await sleep();
-  const flags = [], reasons = [];
+  const flags = [], reasons = [], findings = [];
   for (let r = 0; r < table.rows.length; r++) {
-    const rr = reasonsByRow.get(r);
-    if (rr) { flags.push("이상"); reasons.push(rr.join(", ")); }
-    else { flags.push(""); reasons.push(""); }
+    const fr = findingsByRow.get(r);
+    if (fr) { flags.push("이상"); reasons.push(fr.map(f => f.reason).join(", ")); findings.push(fr); }
+    else { flags.push(""); reasons.push(""); findings.push(null); }
   }
-  onProgress(100, "분석이 완료되었습니다.");
-  return { table, infos, flags, reasons, skipped, anomalyCount: flags.filter(f => f).length };
+  report(100, "분석이 완료되었습니다.", { stage: "done" });
+  return { table, infos, flags, reasons, findings, skipped, approxAlgos, usedAlgos, elapsedMs: Date.now() - t0, anomalyCount: flags.filter(f => f).length };
 }
 
-/* ---- Web Worker 진입점: 워커 컨텍스트에서만 등록된다 ---- */
+/* ---- Web Worker 진입점 ---- */
 if (typeof importScripts === "function") {
   self.onmessage = async (e) => {
     const { columns, rows, config } = e.data;
     try {
       const result = await runAnalysis({ columns, rows }, config,
-        (pct, msg) => self.postMessage({ type: "progress", pct, msg }));
+        (pct, msg, extra) => self.postMessage({ type: "progress", pct, msg, extra }));
       self.postMessage({
-        type: "done", flags: result.flags, reasons: result.reasons,
-        skipped: result.skipped, anomalyCount: result.anomalyCount,
+        type: "done", flags: result.flags, reasons: result.reasons, findings: result.findings,
+        skipped: result.skipped, approxAlgos: result.approxAlgos, usedAlgos: result.usedAlgos,
+        elapsedMs: result.elapsedMs, anomalyCount: result.anomalyCount, infos: result.infos,
       });
     } catch (err) {
       self.postMessage({ type: "error", message: String((err && err.message) || err) });
@@ -2184,8 +2410,12 @@ const XlsxWriter = (function () {
     return new Promise((resolve, reject) => {
       w.onmessage = (e) => {
         const m = e.data;
-        if (m.type === "progress") onProgress(m.pct, m.msg);
-        else if (m.type === "done") resolve({ table: tbl, flags: m.flags, reasons: m.reasons, skipped: m.skipped, anomalyCount: m.anomalyCount });
+        if (m.type === "progress") onProgress(m.pct, m.msg, m.extra || {});
+        else if (m.type === "done") resolve({
+          table: tbl, flags: m.flags, reasons: m.reasons, findings: m.findings,
+          skipped: m.skipped, approxAlgos: m.approxAlgos, usedAlgos: m.usedAlgos,
+          elapsedMs: m.elapsedMs, anomalyCount: m.anomalyCount, infos: m.infos,
+        });
         else if (m.type === "error") reject(new Error(m.message));
       };
       w.onerror = (e) => reject(new Error(e.message || "워커 실행 오류"));
