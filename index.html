@@ -53,7 +53,10 @@
   .grid-opts{display:grid; grid-template-columns:repeat(3,1fr); gap:8px 16px;}
   .grid-opts label{display:flex; align-items:center; gap:6px; cursor:pointer;}
   .params{display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px;}
-  .params2{display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px;}
+  /* 이상 변동 판정 기준: 위쪽 3열 옵션 그리드와 열을 맞춘다(2개 항목은 앞 2열에 배치). */
+  .params2{display:grid; grid-template-columns:repeat(3,1fr); gap:10px 24px;}
+  .params2 .param{align-items:center;}
+  .params2 .param label{margin-right:10px;}
   .param{display:flex; align-items:center; justify-content:space-between; gap:10px;}
   .param label{color:var(--muted);}
   .param input{width:120px;}
@@ -502,8 +505,8 @@
         <label><input type="checkbox" id="opt_cmp_iqr" checked> IQR 기반 변화량</label>
       </div>
       <div class="params2" style="margin-top:12px;">
-        <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1" style="align-items:center margin-right:10px"></div>
-        <div class="param"><label>변화 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1" style="align-items:center margin-right:10px"></div>
+        <div class="param"><label>급변 기준 변화율 (%)</label><input type="number" id="p_cmp_rate" value="50" step="10" min="1" style="margin-right:10px; max-width:120px"></div>
+        <div class="param"><label>변화 Z-Score 임계치</label><input type="number" id="p_cmp_z" value="3.0" step="0.1" min="0.1" style="margin-right:10px; max-width:120px"></div>
       </div>
     </div>
 
@@ -4011,9 +4014,12 @@ window.__infoTooltip = InfoTooltip;
     }
 
     // 3) 이상 변동 판정(수치 변화 셀 대상, 변화 없음 0 도 모수에 포함)
+    //    C-3: 결측치 변경(값↔결측 전환)도 이상 변동으로 함께 판정한다.
     applyAnomalyRules(records, opts, zeroByCol);
     for (const rec of records) {
-      if (rec.cells.some((c) => c.anom && c.anom.length)) rec.tags.push("이상 변동");
+      const hasNumAnom = rec.cells.some((c) => c.anom && c.anom.length);
+      const hasMissingChange = rec.cells.some((c) => c.type === "missing");
+      if (hasNumAnom || hasMissingChange) rec.tags.push("이상 변동");
     }
 
     // 4) 요약
@@ -4190,7 +4196,8 @@ window.__infoTooltip = InfoTooltip;
     if (c.type === "missing") {
       const from = Values.isMissing(c.a) ? "(결측)" : Values.cellText(c.a);
       const to = Values.isMissing(c.b) ? "(결측)" : Values.cellText(c.b);
-      return '<span class="chg miss">' + esc(c.col) + ": " + esc(from) + " → " + esc(to) + "</span>";
+      // C-3: 결측값 변경도 이상 변동으로 취급하므로 이상 변동과 동일하게 강조한다.
+      return '<span class="chg miss anom">' + esc(c.col) + ": " + esc(from) + " → " + esc(to) + " (이상 변동)</span>";
     }
     if (c.type === "type") {
       return '<span class="chg type">' + esc(c.col) + ": " + esc(Values.cellText(c.a)) + " → " +
@@ -4255,7 +4262,7 @@ window.__infoTooltip = InfoTooltip;
     if (c.type === "missing") {
       const from = Values.isMissing(c.a) ? "(결측)" : Values.cellText(c.a);
       const to = Values.isMissing(c.b) ? "(결측)" : Values.cellText(c.b);
-      return c.col + ": " + from + " → " + to + " (결측값 변경)";
+      return c.col + ": " + from + " → " + to + " (결측값 변경 · 이상 변동)";
     }
     if (c.type === "type")
       return c.col + ": " + Values.cellText(c.a) + " → " + Values.cellText(c.b) + " (타입 변경)";
