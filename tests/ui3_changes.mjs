@@ -38,7 +38,7 @@ ok('분석 후 numericPanel 상태 유지(접힘)', (await collapsed('numericPan
 
 console.log('[Design4 사이드바]');
 ok('railToggle 제거됨', await page.evaluate(()=>!document.getElementById('railToggle')), '');
-ok('레일 3개 버튼', (await page.$$eval('.rail-btn', e=>e.length))===3, '');
+ok('레일 4개 버튼', (await page.$$eval('.rail-btn', e=>e.length))===4, '');
 const railW = await page.evaluate(()=>document.getElementById('modeRail').getBoundingClientRect().width);
 ok('레일 기본 너비 180px', Math.abs(railW-180)<2, railW);
 

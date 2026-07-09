@@ -71,6 +71,26 @@
   .deid-config .deid-c-method{ width:110px; }
   .deid-config .deid-c-method select{ width:100px; }
   .deid-config .deid-c-sample{ max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* ===== 정제·형식 변환 ===== */
+  .conv-modes{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  @media (max-width:820px){ .conv-modes{ grid-template-columns:repeat(2,1fr); } }
+  .conv-mode{ display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:8px;
+    padding:12px 14px; cursor:pointer; background:#fff; font-size:13px; }
+  .conv-mode:hover{ background:#f4f7fb; }
+  .conv-mode input{ margin-right:4px; }
+  .conv-mode span.muted{ font-size:11.5px; }
+  .clean-optgroup{ font-size:12px; font-weight:700; margin:12px 0 6px; }
+  .clean-special{ gap:16px; }
+  .clean-special label{ display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
+  .clean-files{ margin-top:10px; display:flex; flex-direction:column; gap:4px; }
+  .clean-file{ display:flex; align-items:center; gap:10px; font-size:12.5px; padding:6px 10px;
+    border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .clean-file .cf-name{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .clean-file .cf-size{ color:var(--muted); flex:0 0 auto; }
+  .clean-file .cf-status{ flex:0 0 auto; font-weight:700; }
+  .clean-file .cf-status.ok{ color:#2e7d32; } .clean-file .cf-status.err{ color:#b23c17; }
+  .clean-file .cf-status.run{ color:#a05d00; } .clean-file .cf-status.wait{ color:#5a6b7b; }
+  .clean-file .cf-x{ flex:0 0 auto; cursor:pointer; color:#b23c17; border:0; background:none; font-size:13px; padding:0 4px; }
   tr.anomaly td{background:var(--anomaly);}
   .progress-outer{background:#e4e9f2; border-radius:20px; height:16px; overflow:hidden;}
   .progress-inner{background:var(--accent); height:100%; width:0%; transition:width .2s;}
@@ -297,6 +317,9 @@
     <button type="button" class="rail-btn" id="railDeid" role="tab" aria-selected="false">
       <span class="ico" aria-hidden="true">🛡️</span><span class="lbl">개인정보 비식별</span>
     </button>
+    <button type="button" class="rail-btn" id="railClean" role="tab" aria-selected="false">
+      <span class="ico" aria-hidden="true">🧹</span><span class="lbl">정제·형식 변환</span>
+    </button>
   </nav>
 
 <div class="wrap">
@@ -306,6 +329,7 @@
     <button type="button" id="tabSingle" class="mode-tab active" role="tab" aria-selected="true">단일 파일 분석</button>
     <button type="button" id="tabCompare" class="mode-tab" role="tab" aria-selected="false">비교 검증</button>
     <button type="button" id="tabDeid" class="mode-tab" role="tab" aria-selected="false">개인정보 비식별</button>
+    <button type="button" id="tabClean" class="mode-tab" role="tab" aria-selected="false">정제·형식 변환</button>
   </div>
 
   <div id="viewSingle">
@@ -613,6 +637,99 @@
     </div>
 
   </div><!-- /viewDeid -->
+
+  <!-- ===== 데이터 정제 · 형식 변환 ===== -->
+  <div id="viewClean" class="hidden">
+
+    <!-- ① 변환 방식 -->
+    <div class="panel">
+      <h2><span class="badge">1</span> 변환 방식 선택</h2>
+      <p class="muted">공공데이터포털 등록을 고려한 데이터 정제 후 저장/변환 기능입니다. 여러 파일을 한 번에 처리하실 수 있습니다.
+        XLSX→XLSX·CSV→CSV 는 형식을 바꾸지 않고 <b>정제 후 원본 형식으로 저장</b>합니다.</p>
+      <div class="conv-modes" role="radiogroup" aria-label="변환 방식 선택">
+        <label class="conv-mode"><input type="radio" name="convMode" value="xlsx2xlsx" checked> <b>XLSX → XLSX</b><span class="muted">정제 후 원본 서식 유지</span></label>
+        <label class="conv-mode"><input type="radio" name="convMode" value="xlsx2csv"> <b>XLSX → CSV</b><span class="muted">시트별 CSV로 변환</span></label>
+        <label class="conv-mode"><input type="radio" name="convMode" value="csv2csv"> <b>CSV → CSV</b><span class="muted">정제 후 CSV로 저장</span></label>
+        <label class="conv-mode"><input type="radio" name="convMode" value="csv2xlsx"> <b>CSV → XLSX</b><span class="muted">CSV를 엑셀로 변환</span></label>
+      </div>
+    </div>
+
+    <!-- ② 파일 업로드(다중) -->
+    <div class="panel">
+      <h2><span class="badge">2</span> 파일 선택 (다중 업로드)</h2>
+      <div class="dropzone" id="dzClean" tabindex="0" role="button"
+           aria-label="파일 업로드 영역. 여러 파일을 드래그하거나 클릭하여 선택합니다.">
+        <div class="dz-icon" aria-hidden="true">⬆</div>
+        <div class="dz-text" id="dzCleanText">여기에 여러 파일을 드래그하거나 클릭하여 선택</div>
+        <div class="dz-sub muted" id="dzCleanSub">최대 30개 · 총 300MB · 선택한 변환 방식의 원본 형식만 처리됩니다</div>
+      </div>
+      <div id="dzCleanError" class="dz-error hidden" role="alert" aria-live="assertive"></div>
+      <div id="cleanFileList" class="clean-files"></div>
+    </div>
+
+    <!-- ③ 정제 옵션 -->
+    <div class="panel coll" id="cleanOptPanel">
+      <h2><span><span class="badge">3</span> 데이터 정제 옵션</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
+      <p class="muted">권장 옵션은 기본으로 켜져 있습니다. 원본 그대로 저장하시려면 옵션을 해제해 주세요.</p>
+      <div class="clean-optgroup muted">기본 정제(권장)</div>
+      <div class="grid-opts clean-opts">
+        <label><input type="checkbox" id="cl_trim" checked> 앞뒤 공백 제거</label>
+        <label><input type="checkbox" id="cl_collapse" checked> 연속 공백 정리</label>
+        <label><input type="checkbox" id="cl_newline" checked> 줄바꿈 제거</label>
+        <label><input type="checkbox" id="cl_tab" checked> Tab 문자 제거</label>
+        <label><input type="checkbox" id="cl_control" checked> 제어문자 제거</label>
+        <label><input type="checkbox" id="cl_html" checked> HTML 태그 제거</label>
+        <label><input type="checkbox" id="cl_invisible" checked> 보이지 않는 문자 제거</label>
+        <label><input type="checkbox" id="cl_colspace" checked> 컬럼명 공백 정리</label>
+        <label><input type="checkbox" id="cl_colspecial" checked> 컬럼명 특수문자 정리</label>
+      </div>
+      <div class="clean-optgroup muted">특수문자 처리 방식</div>
+      <div class="row clean-special" id="cleanSpecialRow">
+        <label><input type="radio" name="clSpecial" value="keep"> 특수문자 유지</label>
+        <label><input type="radio" name="clSpecial" value="common" checked> 일반적인 특수문자만 제거 <span id="cleanSpecialInfo"></span></label>
+        <label><input type="radio" name="clSpecial" value="all"> 모든 특수문자 제거</label>
+      </div>
+      <div class="clean-optgroup muted">선택 옵션</div>
+      <div class="grid-opts clean-opts">
+        <label><input type="checkbox" id="cl_emoji"> 이모지 제거</label>
+        <label><input type="checkbox" id="cl_emptynull"> 빈 문자열 → NULL</label>
+        <label><input type="checkbox" id="cl_nullempty"> NULL → 빈 문자열</label>
+        <label><input type="checkbox" id="cl_dashzero"> "-" 값을 0으로 치환 (숫자 컬럼)</label>
+      </div>
+      <div class="clean-optgroup muted">인코딩</div>
+      <div class="row" style="gap:16px;">
+        <label class="muted">CSV 불러오기&nbsp;
+          <select id="cl_csvin"><option value="auto" selected>자동(UTF-8/BOM/CP949)</option><option value="utf-8">UTF-8</option><option value="cp949">CP949(EUC-KR)</option></select></label>
+        <label class="muted">CSV 저장&nbsp;
+          <select id="cl_csvout"><option value="bom" selected>UTF-8 (BOM) · Excel 권장</option><option value="nobom">UTF-8 (BOM 없음)</option></select></label>
+      </div>
+    </div>
+
+    <!-- ④ 실행 -->
+    <div class="panel runbar">
+      <div id="cleanStatus" style="margin-bottom:12px;">파일을 선택하고 [변환 시작]을 눌러 주세요.</div>
+      <div class="progress-outer"><div class="progress-inner" id="cleanProgress"></div></div>
+      <div id="cleanEta" class="muted" style="font-size:12px; margin-top:6px;"></div>
+      <div id="cleanBanner" class="err-banner hidden" role="alert" aria-live="assertive"></div>
+      <div class="runbtns" style="margin-top:12px;">
+        <button id="btnCleanRun" style="min-width:200px; padding:12px 20px;" disabled>변환 시작</button>
+      </div>
+    </div>
+
+    <!-- ⑤ 결과 -->
+    <div class="panel hidden" id="cleanResultPanel">
+      <h2>변환 결과</h2>
+      <div id="cleanSummary" class="dash" style="margin-bottom:12px;"></div>
+      <div class="row" style="margin-bottom:10px;">
+        <button id="btnCleanDownload">결과 다운로드</button>
+        <span class="muted" id="cleanDownHint"></span>
+      </div>
+      <div class="tbl-scroll">
+        <table id="cleanResultTable"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+  </div><!-- /viewClean -->
 
   <p class="muted" style="text-align:center;">
     ※ 모든 처리는 브라우저 내부에서 수행되며 외부로 데이터가 전송되지 않습니다.
@@ -1529,6 +1646,119 @@ const DeidEngine = (function () {
   return { detect, transform, SHA256, TYPES, EXCLUDE_NAME };
 })();
 
+/* =====================================================================
+ * 데이터 정제 엔진 (DataCleaner) — DOM 미사용
+ *
+ *  - 공공데이터포털 등록을 고려한 값/컬럼명 정제 옵션 모음.
+ *  - cleanString: 값 문자열 1건 정제(단계별 제거 개수 집계).
+ *  - cleanCellValue: 셀 단위 정제(숫자/날짜 타입 보존, '-'→0, 빈값↔NULL).
+ *  - cleanTable: {columns, rows} 전체 정제(csv/새 xlsx 생성용).
+ *  - 특수문자 처리: keep(유지) | common(일반만 제거·기본) | all(모두 제거).
+ * ===================================================================== */
+const DataCleaner = (function () {
+  const DEFAULTS = {
+    trimSpace: true, collapseSpace: true, removeNewline: true, removeTab: true,
+    removeControl: true, removeHtml: true, removeInvisible: true,
+    specialMode: "common",          // keep | common | all
+    cleanColSpace: true, cleanColSpecial: true,
+    removeEmoji: false, emptyToNull: false, nullToEmpty: false, dashToZero: false,
+  };
+  // 제어문자(탭/개행 제외: 각자 옵션에서 처리)
+  const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+  // 보이지 않는 유니코드(zero-width, BOM, 방향 제어 등)
+  const INVIS_RE = /[\u200B\u200C\u200D\u2060\uFEFF\u00AD\u180E\u061C\u202A-\u202E\u2066-\u2069]/g;
+  // 이모지(대표 구간)
+  const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{2190}-\u{21FF}\u{2300}-\u{23FF}]/gu;
+  // '일반적인 특수문자만 제거' 대상(그 외 문자는 유지)
+  const COMMON_RE = /[!@#$^&*`~|<>{}\[\]]/g;
+  // '모든 특수문자 제거': 아래(한글·영문·숫자·공백·- _ / ( ) . % +) 외 전부 제거
+  const ALLREMOVE_RE = /[^0-9A-Za-z\uAC00-\uD7A3\u3130-\u318F\u1100-\u11FF\s\-_/().%+]/g;
+  const HTML_TAG_RE = /<[^>]*>/g;
+
+  function makeContext() {
+    return { specialRemoved: 0, controlRemoved: 0, columnsCleaned: 0, cellsChanged: 0, dashToZero: 0, htmlRemoved: 0 };
+  }
+  function countMatch(s, re) { const m = s.match(re); return m ? m.length : 0; }
+
+  function cleanString(str, o, ctx) {
+    let s = String(str);
+    if (o.removeHtml) {
+      const before = s.length;
+      s = s.replace(HTML_TAG_RE, "")
+        .replace(/&nbsp;/gi, " ").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+        .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&amp;/gi, "&");
+      const removed = Math.max(0, before - s.length);
+      ctx.htmlRemoved += removed; ctx.specialRemoved += removed;
+    }
+    if (o.removeNewline) { ctx.controlRemoved += countMatch(s, /[\r\n]/g); s = s.replace(/\r\n?|\n/g, " "); }
+    if (o.removeTab) { ctx.controlRemoved += countMatch(s, /\t/g); s = s.replace(/\t/g, " "); }
+    if (o.removeControl) { ctx.controlRemoved += countMatch(s, CONTROL_RE); s = s.replace(CONTROL_RE, ""); }
+    if (o.removeInvisible) { ctx.controlRemoved += countMatch(s, INVIS_RE); s = s.replace(INVIS_RE, ""); }
+    if (o.removeEmoji) { ctx.specialRemoved += countMatch(s, EMOJI_RE); s = s.replace(EMOJI_RE, ""); }
+    if (o.specialMode === "common") { ctx.specialRemoved += countMatch(s, COMMON_RE); s = s.replace(COMMON_RE, ""); }
+    else if (o.specialMode === "all") { ctx.specialRemoved += countMatch(s, ALLREMOVE_RE); s = s.replace(ALLREMOVE_RE, ""); }
+    if (o.collapseSpace) s = s.replace(/ {2,}/g, " ");
+    if (o.trimSpace) s = s.trim();
+    return s;
+  }
+
+  function cleanHeader(name, o, ctx) {
+    let s = String(name == null ? "" : name);
+    const before = s;
+    if (o.cleanColSpace) s = s.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+    if (o.cleanColSpecial) s = s.replace(INVIS_RE, "").replace(COMMON_RE, "");
+    if (s !== before) ctx.columnsCleaned++;
+    return s;
+  }
+
+  // 값 1건 정제. isNumericCol 이면 '-'→0(숫자 결측 표기) 우선 처리.
+  function cleanCellValue(value, o, isNumericCol, ctx) {
+    if (Values.isMissing(value)) {
+      if (o.emptyToNull) return null;     // 빈 값 → NULL
+      if (o.nullToEmpty) return "";        // NULL/빈 값 → 빈 문자열
+      return value;
+    }
+    if (value instanceof Date || typeof value === "number") return value;  // 타입/서식 보존
+    let s = String(value);
+    // '-'→0 은 특수문자 제거보다 먼저(숫자 컬럼의 결측 표기 '-' 만 대상)
+    if (o.dashToZero && isNumericCol && s.trim() === "-") { ctx.dashToZero++; ctx.cellsChanged++; return 0; }
+    const cleaned = cleanString(s, o, ctx);
+    if (o.emptyToNull && cleaned === "") { if (s !== "") ctx.cellsChanged++; return null; }
+    if (cleaned !== s) ctx.cellsChanged++;
+    return cleaned;
+  }
+
+  // '-'→0 판정용 숫자 컬럼 집합. '-'(결측 표기)를 제외한 값의 80% 이상이 숫자면 숫자 컬럼으로 본다.
+  // (일반 숫자 판정은 '-' 가 많으면 실패하므로 dashToZero 전용으로 관대하게 판정)
+  function dashNumericCols(columns, rows) {
+    const set = new Set();
+    columns.forEach((c, ci) => {
+      let numeric = 0, other = 0;
+      for (const r of rows) {
+        const v = r[ci];
+        if (Values.isMissing(v)) continue;
+        if (typeof v === "string" && v.trim() === "-") continue;
+        if (typeof v === "number" || Values.toNumber(v) !== null) numeric++; else other++;
+      }
+      if (numeric > 0 && numeric / (numeric + other) >= 0.8) set.add(c);
+    });
+    return set;
+  }
+
+  // {columns, rows} 전체 정제(csv/새 xlsx 출력용). 원본 배열은 변경하지 않는다.
+  function cleanTable(columns, rows, opts) {
+    const o = Object.assign({}, DEFAULTS, opts || {});
+    const ctx = makeContext();
+    const numericSet = o.dashToZero ? dashNumericCols(columns, rows) : new Set();
+    const newCols = columns.map((c) => cleanHeader(c, o, ctx));
+    const newRows = rows.map((r) => columns.map((c, ci) => cleanCellValue(r[ci], o, numericSet.has(c), ctx)));
+    ctx.rowCount = rows.length; ctx.colCount = columns.length;
+    return { columns: newCols, rows: newRows, summary: ctx };
+  }
+
+  return { DEFAULTS, makeContext, cleanString, cleanHeader, cleanCellValue, cleanTable, dashNumericCols };
+})();
+
 /* ---- Web Worker 진입점 ---- */
 if (typeof importScripts === "function") {
   self.onmessage = async (e) => {
@@ -2302,16 +2532,24 @@ const XlsReader = (function () {
 })();
 
 const CsvReader = (function () {
-  function decode(buffer) {
-    let text = new TextDecoder("utf-8").decode(buffer);
-    if (text.indexOf("�") >= 0) {
-      try {
-        const alt = new TextDecoder("euc-kr").decode(buffer);
-        if (alt.indexOf("�") < 0) text = alt;
-      } catch (e) { /* euc-kr 미지원 시 utf-8 유지 */ }
-    }
-    if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-    return text;
+  const stripBom = (t) => (t.charCodeAt(0) === 0xFEFF ? t.slice(1) : t);
+  /** 인코딩 자동 판별: UTF-8 BOM → UTF-8 → CP949(EUC-KR) 순. forced 로 강제 지정 가능. */
+  function decode(buffer, forced) {
+    const b = buffer;
+    if (forced === "utf-8" || forced === "utf-8-bom") return stripBom(new TextDecoder("utf-8").decode(b));
+    if (forced === "cp949" || forced === "euc-kr") { try { return new TextDecoder("euc-kr").decode(b); } catch (e) { return stripBom(new TextDecoder("utf-8").decode(b)); } }
+    // 1) UTF-8 BOM
+    if (b.length >= 3 && b[0] === 0xEF && b[1] === 0xBB && b[2] === 0xBF)
+      return stripBom(new TextDecoder("utf-8").decode(b));
+    // 2) UTF-8 (치환문자 없으면 확정)
+    let text = new TextDecoder("utf-8").decode(b);
+    if (text.indexOf("�") < 0) return stripBom(text);
+    // 3) CP949(EUC-KR)
+    try {
+      const alt = new TextDecoder("euc-kr").decode(b);
+      if (alt.indexOf("�") < 0) return alt;
+    } catch (e) { /* euc-kr 미지원 시 utf-8 유지 */ }
+    return stripBom(text);
   }
   async function parse(text, onProgress) {
     const rows = []; let row = [], field = "", inQuotes = false;
@@ -2337,9 +2575,41 @@ const CsvReader = (function () {
     return rows;
   }
   // 2차원 grid 반환(헤더/영역 탐지는 gridToTable 이 담당)
-  async function readGrid(buffer, onProgress) { return await parse(decode(buffer), onProgress); }
-  async function read(buffer, onProgress) { return gridToTable(await readGrid(buffer, onProgress)); }
+  async function readGrid(buffer, onProgress, forced) { return await parse(decode(buffer, forced), onProgress); }
+  async function read(buffer, onProgress, forced) { return gridToTable(await readGrid(buffer, onProgress, forced)); }
   return { read, readGrid, parse, decode };
+})();
+
+/* =====================================================================
+ * CSV 작성기 (CsvWriter) — 한글 깨짐 방지(UTF-8 BOM 기본) + RFC4180 인용
+ *
+ *  - 셀에 , " 개행 이 있으면 큰따옴표로 감싸고 내부 " 는 두 번 반복한다.
+ *  - 수식 주입 방어: "=","@" 로 시작하는 문자열은 앞에 작은따옴표(')를 붙인다
+ *    (숫자의 부호 +,- 는 값 손상을 막기 위해 무력화하지 않는다 — 기존 규칙과 동일).
+ *  - toBytes: UTF-8 BOM(EF BB BF) 접두 → Windows Excel/LibreOffice 한글 정상 표시.
+ * ===================================================================== */
+const CsvWriter = (function () {
+  const enc = new TextEncoder();
+  function field(v) {
+    let s = Values.cellText(v);
+    if (/^[=@]/.test(s)) s = "'" + s;                 // 수식 무력화(=, @)
+    if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function toText(columns, rows) {
+    const lines = [columns.map(field).join(",")];
+    for (const r of rows) lines.push(columns.map((c, i) => field(r[i])).join(","));
+    return lines.join("\r\n") + "\r\n";
+  }
+  function toBytes(columns, rows, opts) {
+    const bom = !opts || opts.bom !== false;           // 기본 UTF-8 BOM
+    const body = enc.encode(toText(columns, rows));
+    if (!bom) return body;
+    const out = new Uint8Array(body.length + 3);
+    out[0] = 0xEF; out[1] = 0xBB; out[2] = 0xBF; out.set(body, 3);
+    return out;
+  }
+  return { toText, toBytes, field };
 })();
 
 /** 파일을 열어 시트 목록과 시트별 읽기 함수를 제공한다(다중 시트 지원).
@@ -2681,12 +2951,142 @@ const XlsxAppender = (function () {
 })();
 
 /* =====================================================================
+ * 7-3. 원본 서식 유지 정제기 (XlsxCleaner)
+ *
+ *  - 원본 xlsx 의 모든 시트에서 '텍스트 셀 값'만 DataCleaner 로 정제한다.
+ *  - 숫자/날짜/수식(<f>) 셀은 건드리지 않아 서식·타입이 그대로 유지된다.
+ *  - 각 셀의 s(스타일 인덱스)를 보존 → 글꼴/색/정렬/테두리/열너비/행높이/병합 전부 유지.
+ *  - '-'→0 은 숫자 컬럼의 텍스트 '-' 셀만 수치 0 으로 변환한다.
+ *  - styles.xml/sharedStrings/시트 이름/순서 등은 변경하지 않는다.
+ * ===================================================================== */
+const XlsxCleaner = (function () {
+  const parser = new DOMParser();
+  const dec = new TextDecoder("utf-8");
+  const enc = new TextEncoder();
+  const SS_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+  const XML_NS = "http://www.w3.org/XML/1998/namespace";
+  function colToIndex(letters) { let n = 0; for (let i = 0; i < letters.length; i++) n = n * 26 + (letters.charCodeAt(i) - 64); return n - 1; }
+  const child = (el, name) => { for (let i = 0; i < el.childNodes.length; i++) { const c = el.childNodes[i]; if (c.nodeType === 1 && c.localName === name) return c; } return null; };
+
+  // 시트 grid 로부터 grid-열 인덱스별 '숫자 컬럼' 판정('-' 제외 80% 이상 숫자)
+  function numericColSet(grid, headerRow0) {
+    let width = 0; for (const r of grid) if (r && r.length > width) width = r.length;
+    const set = new Set();
+    for (let c = 0; c < width; c++) {
+      let numeric = 0, other = 0;
+      for (let r = headerRow0 + 1; r < grid.length; r++) {
+        const v = grid[r] ? grid[r][c] : null;
+        if (v == null || Values.isMissing(v)) continue;
+        if (typeof v === "string" && v.trim() === "-") continue;
+        if (typeof v === "number" || Values.toNumber(v) !== null) numeric++; else other++;
+      }
+      if (numeric > 0 && numeric / (numeric + other) >= 0.8) set.add(c);
+    }
+    return set;
+  }
+
+  function clearChildren(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+  function encodeString(doc, cell, text) {
+    clearChildren(cell);
+    cell.setAttribute("t", "inlineStr");
+    const is = doc.createElementNS(SS_NS, "is");
+    const t = doc.createElementNS(SS_NS, "t");
+    t.setAttributeNS(XML_NS, "xml:space", "preserve");
+    t.textContent = text;
+    is.appendChild(t); cell.appendChild(is);
+  }
+  function encodeNumber(doc, cell, num) {
+    clearChildren(cell); cell.removeAttribute("t");
+    const v = doc.createElementNS(SS_NS, "v"); v.textContent = String(num); cell.appendChild(v);
+  }
+  function encodeEmpty(cell) { clearChildren(cell); cell.removeAttribute("t"); }
+
+  /** @return {bytes, summary} */
+  function clean(wb, opts) {
+    const o = Object.assign({}, DataCleaner.DEFAULTS, opts || {});
+    const ctx = DataCleaner.makeContext();
+    const files = Object.assign({}, wb.files);
+    let sheetCount = 0;
+    for (let si = 0; si < wb.sheets.length; si++) {
+      const sheet = wb.sheets[si];
+      if (!files[sheet.path]) continue;
+      const grid = XlsxReader.grid(wb, si);
+      const meta = gridToTable(grid).meta;
+      const headerRow0 = (meta.headerRowNum || 1) - 1;
+      const numCols = o.dashToZero ? numericColSet(grid, headerRow0) : new Set();
+
+      const doc = parser.parseFromString(dec.decode(files[sheet.path]), "application/xml");
+      if (doc.getElementsByTagName("parsererror").length) continue;
+      const cells = doc.getElementsByTagName("c");
+      for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        if (child(cell, "f")) continue;               // 수식 셀은 보존
+        const t = cell.getAttribute("t");
+        if (t !== "s" && t !== "str" && t !== "inlineStr") continue;   // 텍스트 셀만
+        // 값 문자열 해석
+        let str = "";
+        if (t === "inlineStr") { const isEl = child(cell, "is"); if (isEl) { const ts = isEl.getElementsByTagName("t"); for (let k = 0; k < ts.length; k++) str += ts[k].textContent; } }
+        else { const vEl = child(cell, "v"); if (!vEl) continue; str = t === "s" ? (wb.shared[parseInt(vEl.textContent, 10)] || "") : vEl.textContent; }
+        const ref = cell.getAttribute("r") || "";
+        const L = ref.replace(/[0-9]/g, ""); const colIdx = L ? colToIndex(L) : -1;
+        const rowNum = parseInt(ref.replace(/[^0-9]/g, ""), 10) || 0;
+        if (rowNum === meta.headerRowNum) {
+          const nv = DataCleaner.cleanHeader(str, o, ctx);
+          if (nv !== str) encodeString(doc, cell, nv);
+          continue;
+        }
+        const cv = DataCleaner.cleanCellValue(str, o, numCols.has(colIdx), ctx);
+        if (cv === null) encodeEmpty(cell);
+        else if (typeof cv === "number") encodeNumber(doc, cell, cv);
+        else if (cv !== str) encodeString(doc, cell, cv);
+      }
+      files[sheet.path] = enc.encode(new XMLSerializer().serializeToString(doc));
+      sheetCount++;
+    }
+    ctx.sheetCount = sheetCount;
+    const entries = Object.keys(files).map((n) => ({ name: n, data: files[n] }));
+    return { bytes: Zip.write(entries), summary: ctx };
+  }
+
+  return { clean };
+})();
+
+/* =====================================================================
+ * 공통 다운로드 모듈 (Downloader)
+ *  - 프로젝트의 모든 파일 저장(xlsx/csv/zip)이 동일 경로를 사용한다.
+ *  - 여러 출력물은 ZIP(무압축, Zip.write)으로 묶어 한 번에 내려받는다.
+ * ===================================================================== */
+const Downloader = (function () {
+  const MIME = {
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    csv: "text/csv;charset=utf-8", zip: "application/zip",
+  };
+  function ensureExt(name, ext) {
+    return new RegExp("\\." + ext + "$", "i").test(name) ? name : name.replace(/\.[^.]+$/, "") + "." + ext;
+  }
+  function saveBytes(bytes, filename, mime) {
+    const blob = new Blob([bytes], { type: mime || "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+  const saveXlsx = (bytes, name) => saveBytes(bytes, ensureExt(name, "xlsx"), MIME.xlsx);
+  const saveCsv = (bytes, name) => saveBytes(bytes, ensureExt(name, "csv"), MIME.csv);
+  // files: [{name, data:Uint8Array}]
+  function zipBytes(files) { return Zip.write(files); }
+  const saveZip = (files, name) => saveBytes(Zip.write(files), ensureExt(name, "zip"), MIME.zip);
+  return { saveBytes, saveXlsx, saveCsv, saveZip, zipBytes, ensureExt, MIME };
+})();
+window.__download = Downloader;
+
+/* =====================================================================
  * 8. UI 연동
  * ===================================================================== */
 (function () {
   const $ = (id) => document.getElementById(id);
   const FLAG_COL = "이상치 여부", REASON_COL = "이상치 사유";
-  const APP_VERSION = "v2.0", BUILD_DATE = "2026-07-09";
+  const APP_VERSION = "v2.1", BUILD_DATE = "2026-07-09";
   let table = null, numericConfigs = [], lastResult = null;
 
   // 푸터 버전 표기(UX-5) + #debug 해시로 디버그 로그 활성화(OPS-2)
@@ -3560,17 +3960,12 @@ const XlsxAppender = (function () {
         { name: "Anomaly", columns: cols, rows: anomRows, fillSlots: anomSlots },
       ]);
     }
-    let name = $("outName").value.trim() || "anomaly_result.xlsx";
-    if (!/\.xlsx$/i.test(name)) name += ".xlsx";
-    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = name; document.body.appendChild(a); a.click();
-    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const name = $("outName").value.trim() || "anomaly_result.xlsx";
+    Downloader.saveXlsx(bytes, name);   // 공통 다운로드 모듈
   });
 
   // 테스트 편의를 위해 일부 내부 기능을 전역에 노출
-  window.__anomaly = { readFile, runAnalysis, XlsxWriter, XlsxAppender, XlsxReader, ColumnAnalyzer, Zip, Values, TableWrapper, DeidEngine };
+  window.__anomaly = { readFile, runAnalysis, XlsxWriter, XlsxAppender, XlsxCleaner, XlsxReader, ColumnAnalyzer, Zip, Values, TableWrapper, DeidEngine, DataCleaner, CsvWriter, CsvReader, loadWorkbook };
   window.__upload = { handleFile, handleFiles, dedupeColumns, escapeHtml, validateUploadFile };
 })();
 
@@ -3782,6 +4177,14 @@ const TOOLTIP_INFO = {
     practical: "연 단위 비교는 30~50%, 월 단위 비교는 50~100%를 자주 사용합니다.",
     caution: "감소는 -100%보다 작아질 수 없으므로, 감소 탐지가 목적이라면 100% 미만으로 설정해 주세요.",
   },
+  clean_special: {
+    title: "일반적인 특수문자만 제거",
+    meaning: "아래 문자를 제거합니다:  ! @ # $ ^ & * ` ~ | < > { } [ ]",
+    purpose: "공공데이터 표준에 어긋나는 기호를 정리하되, 자주 쓰는 기호는 남겨 둡니다.",
+    common: "유지 대상: 한글 · 영문 · 숫자 · - · _ · / · . · ( ) · % · +",
+    practical: "쉼표(,)·콜론(:) 등 목록 구분 기호는 그대로 유지됩니다.",
+    caution: "모든 기호를 없애려면 '모든 특수문자 제거'를 선택해 주세요(유지 대상만 남습니다).",
+  },
   p_cmp_z: {
     title: "변화량 Z-Score 임계치",
     meaning: "컬럼별 변화량 분포에서 표준편차의 몇 배 이상 벗어난 변화를 이상 변동으로 볼지 정합니다.",
@@ -3932,13 +4335,17 @@ window.__infoTooltip = InfoTooltip;
 
   /* ---------- 모드 탭 ---------- */
   function switchMode(mode) {
-    const modes = ["single", "compare", "deid"];
+    const modes = ["single", "compare", "deid", "clean"];
     if (modes.indexOf(mode) < 0) mode = "single";
     $("viewSingle").classList.toggle("hidden", mode !== "single");
     $("viewCompare").classList.toggle("hidden", mode !== "compare");
     $("viewDeid").classList.toggle("hidden", mode !== "deid");
+    const vc = $("viewClean"); if (vc) vc.classList.toggle("hidden", mode !== "clean");
     // 상단 탭(모바일) + 좌측 레일 버튼 동시 반영
-    const map = { single: ["tabSingle", "railSingle"], compare: ["tabCompare", "railCompare"], deid: ["tabDeid", "railDeid"] };
+    const map = {
+      single: ["tabSingle", "railSingle"], compare: ["tabCompare", "railCompare"],
+      deid: ["tabDeid", "railDeid"], clean: ["tabClean", "railClean"],
+    };
     Object.keys(map).forEach((m) => {
       const active = m === mode;
       map[m].forEach((id) => {
@@ -3951,9 +4358,11 @@ window.__infoTooltip = InfoTooltip;
   $("tabSingle").addEventListener("click", () => switchMode("single"));
   $("tabCompare").addEventListener("click", () => switchMode("compare"));
   $("tabDeid").addEventListener("click", () => switchMode("deid"));
+  $("tabClean").addEventListener("click", () => switchMode("clean"));
   $("railSingle").addEventListener("click", () => switchMode("single"));
   $("railCompare").addEventListener("click", () => switchMode("compare"));
   $("railDeid").addEventListener("click", () => switchMode("deid"));
+  $("railClean").addEventListener("click", () => switchMode("clean"));
 
   /* ---------- 파일 슬롯(A/B) 업로드 ---------- */
   function setCmpError(msg) {
@@ -4518,12 +4927,7 @@ window.__infoTooltip = InfoTooltip;
       { name: "Compare", columns: cols, rows, fillSlots: slots },
       { name: "Summary", columns: ["항목", "값"], rows: sumRows, fillSlots: null },
     ]);
-    const fname = "compare_result.xlsx";
-    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
-    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    Downloader.saveXlsx(bytes, "compare_result.xlsx");   // 공통 다운로드 모듈
   });
 
   // 테스트 편의를 위해 내부 기능 노출
@@ -4706,11 +5110,7 @@ window.__infoTooltip = InfoTooltip;
       { name: "처리요약", columns: ["컬럼명", "추정 유형", "신뢰도", "처리 방식", "적용 여부"], rows: summaryRows, fillSlots: null },
     ]);
     const fname = $("deidOutName").value || "deidentified_result.xlsx";
-    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
-    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    Downloader.saveXlsx(bytes, fname);   // 공통 다운로드 모듈
   }
 
   // ----- 이벤트 바인딩 -----
@@ -4756,6 +5156,279 @@ window.__infoTooltip = InfoTooltip;
   });
 
   window.__deid = { loadDeidFile, applyDeidSheet, collectPlan, renderDeidPreview, downloadDeid, getDetections: () => deidDetections, getTable: () => deidTable };
+})();
+
+/* =====================================================================
+ * 12. 데이터 정제 · 형식 변환 (다중 파일 일괄 처리)
+ *
+ *  - 변환 방식: XLSX→XLSX / XLSX→CSV / CSV→CSV / CSV→XLSX
+ *  - 정제: DataCleaner(값/컬럼명) · XLSX→XLSX 는 원본 서식 유지(XlsxCleaner)
+ *  - 다중 파일 순차 처리(UI 양보) + 진행률 + 파일별 성공/실패 + ZIP 다운로드
+ *  - CSV 저장은 UTF-8 BOM 기본(한글 깨짐 방지), 불러오기 인코딩 자동/강제 선택
+ * ===================================================================== */
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const A = window.__anomaly;
+  const esc = window.__upload.escapeHtml;
+  const MAX_FILES = 30, MAX_TOTAL = 300 * 1024 * 1024;
+  const MODE_SRC = { xlsx2xlsx: "xlsx", xlsx2csv: "xlsx", csv2csv: "csv", csv2xlsx: "csv" };
+  const XLSX_MIME = A.XlsxWriter ? "xlsx" : "xlsx";
+
+  let files = [];            // {file, status:'wait'|'run'|'ok'|'err', message}
+  let lastOutputs = [];      // [{name, data, kind}]
+  let busy = false;
+
+  function fmtSize(n) { return n < 1024 ? n + "B" : n < 1048576 ? (n / 1024).toFixed(0) + "KB" : (n / 1048576).toFixed(1) + "MB"; }
+  function curMode() { return (document.querySelector("input[name=convMode]:checked") || {}).value || "xlsx2xlsx"; }
+  function extOf(name) { const i = name.lastIndexOf("."); return i >= 0 ? name.slice(i + 1).toLowerCase() : ""; }
+  function baseOf(name) { return name.replace(/\.[^.]+$/, ""); }
+  function safeName(s) { return String(s).replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, " ").trim() || "sheet"; }
+
+  function setCleanError(msg) {
+    const el = $("dzCleanError");
+    if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = "⚠ " + msg; el.classList.remove("hidden");
+  }
+  function setCleanBanner(msg) {
+    const b = $("cleanBanner");
+    if (!msg) { b.classList.add("hidden"); b.textContent = ""; return; }
+    b.textContent = msg; b.classList.remove("hidden");
+  }
+
+  function collectOpts() {
+    return {
+      trimSpace: $("cl_trim").checked, collapseSpace: $("cl_collapse").checked,
+      removeNewline: $("cl_newline").checked, removeTab: $("cl_tab").checked,
+      removeControl: $("cl_control").checked, removeHtml: $("cl_html").checked,
+      removeInvisible: $("cl_invisible").checked,
+      cleanColSpace: $("cl_colspace").checked, cleanColSpecial: $("cl_colspecial").checked,
+      specialMode: (document.querySelector("input[name=clSpecial]:checked") || {}).value || "common",
+      removeEmoji: $("cl_emoji").checked, emptyToNull: $("cl_emptynull").checked,
+      nullToEmpty: $("cl_nullempty").checked, dashToZero: $("cl_dashzero").checked,
+    };
+  }
+  function anyClean(o) {
+    return o.specialMode !== "keep" || o.trimSpace || o.collapseSpace || o.removeNewline || o.removeTab ||
+      o.removeControl || o.removeHtml || o.removeInvisible || o.cleanColSpace || o.cleanColSpecial ||
+      o.removeEmoji || o.emptyToNull || o.nullToEmpty || o.dashToZero;
+  }
+  const CTX_KEYS = ["specialRemoved", "controlRemoved", "columnsCleaned", "cellsChanged", "dashToZero", "htmlRemoved"];
+  function mergeCtx(agg, c) { CTX_KEYS.forEach((k) => { agg[k] = (agg[k] || 0) + (c[k] || 0); }); if (c.sheetCount) agg.sheetCount = (agg.sheetCount || 0) + c.sheetCount; }
+
+  // 파일 1건 변환 → {outputs:[{name,data,kind}], summary}
+  async function convertOne(file, mode, opts, csvOut, csvIn) {
+    const ext = extOf(file.name), src = MODE_SRC[mode];
+    if (src === "xlsx" && ext !== "xlsx" && ext !== "xls")
+      throw new Error("이 변환 방식은 XLSX 파일만 처리합니다 (현재: ." + (ext || "?") + ")");
+    if (src === "csv" && ext !== "csv")
+      throw new Error("이 변환 방식은 CSV 파일만 처리합니다 (현재: ." + (ext || "?") + ")");
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const base = baseOf(file.name);
+    const bomOut = csvOut !== "nobom";
+    const forcedIn = csvIn === "auto" ? null : csvIn;
+
+    if (mode === "xlsx2xlsx") {
+      if (ext === "xls") {   // 구형 xls 는 원본 서식 유지 대상이 아니므로 정제 후 xlsx 로 저장
+        const wb0 = await A.loadWorkbook(file);
+        const agg = A.DataCleaner.makeContext();
+        const sheetsOut = [];
+        wb0.sheets.forEach((nm, i) => {
+          const t = wb0.readSheet(i);
+          const c = A.DataCleaner.cleanTable(t.columns, t.rows, opts);
+          mergeCtx(agg, c.summary);
+          sheetsOut.push({ name: safeName(nm).slice(0, 31), columns: c.columns, rows: c.rows, fillSlots: null });
+        });
+        agg.sheetCount = sheetsOut.length;
+        return { outputs: [{ name: base + ".xlsx", data: A.XlsxWriter.buildWorkbook(sheetsOut), kind: "xlsx" }], summary: agg };
+      }
+      const wb = A.XlsxReader.open(buf);
+      if (!anyClean(opts)) return { outputs: [{ name: base + ".xlsx", data: buf, kind: "xlsx" }], summary: { sheetCount: wb.sheets.length } };
+      const res = A.XlsxCleaner.clean(wb, opts);
+      return { outputs: [{ name: base + ".xlsx", data: res.bytes, kind: "xlsx" }], summary: res.summary };
+    }
+    if (mode === "xlsx2csv") {
+      const wb = await A.loadWorkbook(file);
+      const agg = A.DataCleaner.makeContext(); const outs = [];
+      const multi = wb.sheets.length > 1;
+      wb.sheets.forEach((nm, i) => {
+        const t = wb.readSheet(i);
+        const c = A.DataCleaner.cleanTable(t.columns, t.rows, opts);
+        mergeCtx(agg, c.summary);
+        const csv = A.CsvWriter.toBytes(c.columns, c.rows, { bom: bomOut });
+        outs.push({ name: (multi ? base + "_" + safeName(nm) : base) + ".csv", data: csv, kind: "csv" });
+      });
+      agg.sheetCount = wb.sheets.length;
+      return { outputs: outs, summary: agg };
+    }
+    if (mode === "csv2csv" || mode === "csv2xlsx") {
+      const grid = await A.CsvReader.readGrid(buf, null, forcedIn);
+      const t = window.__readers.gridToTable(grid);
+      const c = A.DataCleaner.cleanTable(t.columns, t.rows, opts);
+      c.summary.sheetCount = 1;
+      if (mode === "csv2csv")
+        return { outputs: [{ name: base + ".csv", data: A.CsvWriter.toBytes(c.columns, c.rows, { bom: bomOut }), kind: "csv" }], summary: c.summary };
+      const bytes = A.XlsxWriter.buildWorkbook([{ name: "Sheet1", columns: c.columns, rows: c.rows, fillSlots: null }]);
+      return { outputs: [{ name: base + ".xlsx", data: bytes, kind: "xlsx" }], summary: c.summary };
+    }
+    throw new Error("알 수 없는 변환 방식");
+  }
+
+  // ---------- UI ----------
+  function renderFileList() {
+    const box = $("cleanFileList");
+    if (!files.length) { box.innerHTML = ""; return; }
+    box.innerHTML = files.map((f, i) => {
+      const st = f.status;
+      const label = { wait: "대기", run: "처리 중", ok: "성공", err: "실패" }[st] || "";
+      const removable = !busy ? '<button class="cf-x" data-i="' + i + '" aria-label="제거">✕</button>' : "";
+      return '<div class="clean-file"><span class="cf-name" title="' + esc(f.file.name) + '">' + esc(f.file.name) + "</span>" +
+        '<span class="cf-size">' + fmtSize(f.file.size) + "</span>" +
+        '<span class="cf-status ' + st + '">' + label + (f.message ? " · " + esc(f.message) : "") + "</span>" + removable + "</div>";
+    }).join("");
+    box.querySelectorAll(".cf-x").forEach((b) => b.addEventListener("click", () => { files.splice(parseInt(b.dataset.i, 10), 1); afterFilesChanged(); }));
+  }
+  function afterFilesChanged() {
+    renderFileList();
+    $("btnCleanRun").disabled = busy || files.length === 0;
+    $("cleanResultPanel").classList.add("hidden");
+    lastOutputs = [];
+  }
+  function addFiles(list) {
+    setCleanError("");
+    const incoming = Array.from(list || []);
+    if (!incoming.length) return;
+    for (const f of incoming) {
+      if (files.length >= MAX_FILES) { setCleanError("최대 " + MAX_FILES + "개까지 선택하실 수 있습니다."); break; }
+      files.push({ file: f, status: "wait", message: "" });
+    }
+    const total = files.reduce((s, x) => s + x.file.size, 0);
+    if (total > MAX_TOTAL) { setCleanError("총 용량이 " + fmtSize(MAX_TOTAL) + " 를 초과했습니다. 일부 파일을 제거해 주세요."); }
+    afterFilesChanged();
+  }
+
+  async function runBatch() {
+    if (busy || !files.length) return;
+    const mode = curMode(), opts = collectOpts();
+    const csvOut = $("cl_csvout").value, csvIn = $("cl_csvin").value;
+    busy = true; setCleanBanner(""); $("btnCleanRun").disabled = true;
+    files.forEach((f) => { f.status = "wait"; f.message = ""; });
+    lastOutputs = [];
+    const agg = A.DataCleaner.makeContext(); agg.sheetCount = 0;
+    let okCount = 0, outCount = 0;
+    const t0 = performance.now();
+    for (let i = 0; i < files.length; i++) {
+      const entry = files[i];
+      entry.status = "run"; renderFileList();
+      $("cleanStatus").textContent = "처리 중 (" + (i + 1) + " / " + files.length + "): " + entry.file.name;
+      $("cleanProgress").style.width = Math.round((i / files.length) * 100) + "%";
+      await new Promise((r) => setTimeout(r, 0));   // UI 양보(브라우저 멈춤 방지)
+      try {
+        const res = await convertOne(entry.file, mode, opts, csvOut, csvIn);
+        res.outputs.forEach((o) => lastOutputs.push(o));
+        mergeCtx(agg, res.summary);
+        outCount += res.outputs.length; okCount++;
+        entry.status = "ok"; entry.message = res.outputs.length > 1 ? res.outputs.length + "개 파일" : "";
+      } catch (e) {
+        entry.status = "err"; entry.message = String((e && e.message) || e);
+      }
+      renderFileList();
+    }
+    $("cleanProgress").style.width = "100%";
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    $("cleanStatus").textContent = "완료: 성공 " + okCount + " / " + files.length + "개 · 소요 " + secs + "초";
+    busy = false; $("btnCleanRun").disabled = files.length === 0;
+    renderResult(mode, opts, agg, okCount, outCount);
+  }
+
+  function optSummaryText(o) {
+    const on = [];
+    if (o.trimSpace) on.push("앞뒤 공백"); if (o.collapseSpace) on.push("연속 공백");
+    if (o.removeNewline) on.push("줄바꿈"); if (o.removeTab) on.push("Tab");
+    if (o.removeControl) on.push("제어문자"); if (o.removeHtml) on.push("HTML");
+    if (o.removeInvisible) on.push("숨은 문자");
+    on.push("특수문자:" + ({ keep: "유지", common: "일반 제거", all: "모두 제거" }[o.specialMode]));
+    if (o.removeEmoji) on.push("이모지 제거"); if (o.emptyToNull) on.push("빈값→NULL");
+    if (o.nullToEmpty) on.push("NULL→빈값"); if (o.dashToZero) on.push('"-"→0');
+    if (o.cleanColSpace || o.cleanColSpecial) on.push("컬럼명 정리");
+    return on.join(" · ");
+  }
+  const MODE_LABEL = { xlsx2xlsx: "XLSX → XLSX", xlsx2csv: "XLSX → CSV", csv2csv: "CSV → CSV", csv2xlsx: "CSV → XLSX" };
+
+  function renderResult(mode, opts, agg, okCount, outCount) {
+    $("cleanSummary").innerHTML =
+      '<div class="dash-head" style="cursor:default;"><span>🧹 정제·변환 요약</span></div>' +
+      '<div class="dash-body"><div class="dash-cards">' +
+      '<div class="dash-card"><h4>변환 방식</h4><div class="big" style="font-size:16px">' + MODE_LABEL[mode] + "</div></div>" +
+      '<div class="dash-card"><h4>성공 / 전체</h4><div class="big">' + okCount + " / " + files.length + "</div><div class=\"sub\">생성 파일 " + outCount + "개 · 시트 " + (agg.sheetCount || 0) + "개</div></div>" +
+      '<div class="dash-card"><h4>제거된 문자</h4><div class="big">' + ((agg.specialRemoved || 0) + (agg.controlRemoved || 0)).toLocaleString() + "</div><div class=\"sub\">특수 " + (agg.specialRemoved || 0) + " · 제어 " + (agg.controlRemoved || 0) + "</div></div>" +
+      '<div class="dash-card"><h4>정리 항목</h4><div class="big">' + (agg.columnsCleaned || 0) + "</div><div class=\"sub\">컬럼명 정리 · 셀 변경 " + (agg.cellsChanged || 0) + " · &quot;-&quot;→0 " + (agg.dashToZero || 0) + "</div></div>" +
+      '</div><p class="muted" style="margin-top:10px;">적용된 정제 옵션: ' + esc(optSummaryText(opts)) + "</p></div>";
+
+    const tb = $("cleanResultTable");
+    tb.querySelector("thead").innerHTML = "<tr><th>파일</th><th>상태</th><th>결과/사유</th></tr>";
+    tb.querySelector("tbody").innerHTML = files.map((f) => {
+      const cls = f.status === "ok" ? "ok" : "err";
+      const label = f.status === "ok" ? "성공" : "실패";
+      return "<tr><td>" + esc(f.file.name) + '</td><td class="cf-status ' + cls + '">' + label + "</td><td>" + esc(f.message || "") + "</td></tr>";
+    }).join("");
+
+    $("cleanDownHint").textContent = lastOutputs.length > 1 ? "파일 " + lastOutputs.length + "개를 ZIP으로 내려받습니다." : "";
+    $("btnCleanDownload").disabled = lastOutputs.length === 0;
+    $("cleanResultPanel").classList.remove("hidden");
+    try { $("cleanResultPanel").scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) {}
+  }
+
+  function download() {
+    if (!lastOutputs.length) return;
+    if (lastOutputs.length === 1) {
+      const o = lastOutputs[0];
+      if (o.kind === "csv") window.__download.saveCsv(o.data, o.name);
+      else window.__download.saveXlsx(o.data, o.name);
+      return;
+    }
+    // 여러 출력물 → ZIP (파일명 충돌 시 번호 부여)
+    const used = {}, entries = [];
+    for (const o of lastOutputs) {
+      let nm = o.name;
+      if (used[nm]) { const b = nm.replace(/\.[^.]+$/, ""), e = nm.slice(b.length); nm = b + "(" + (used[o.name]) + ")" + e; }
+      used[o.name] = (used[o.name] || 0) + 1;
+      entries.push({ name: nm, data: o.data });
+    }
+    window.__download.saveZip(entries, "converted_files.zip");
+  }
+
+  // ---------- 이벤트 바인딩 ----------
+  (function setup() {
+    const dz = $("dzClean"); let depth = 0;
+    const input = document.createElement("input");
+    input.type = "file"; input.multiple = true; input.accept = ".csv,.xlsx,.xls"; input.className = "hidden";
+    dz.appendChild(input);
+    dz.addEventListener("dragenter", (e) => { e.preventDefault(); depth++; dz.classList.add("dragover"); });
+    dz.addEventListener("dragover", (e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = busy ? "none" : "copy"; });
+    dz.addEventListener("dragleave", () => { depth--; if (depth <= 0) { depth = 0; dz.classList.remove("dragover"); } });
+    dz.addEventListener("drop", (e) => { e.preventDefault(); depth = 0; dz.classList.remove("dragover"); if (busy) return; const dt = e.dataTransfer; if (dt && dt.files && dt.files.length) addFiles(dt.files); });
+    dz.addEventListener("click", () => { if (!busy) input.click(); });
+    dz.addEventListener("keydown", (e) => { if (e.target !== dz) return; if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!busy) input.click(); } });
+    input.addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+
+    // 접이식 헤더
+    const h = $("cleanOptPanel").querySelector("h2");
+    h.setAttribute("role", "button"); h.setAttribute("tabindex", "0");
+    h.addEventListener("click", () => $("cleanOptPanel").classList.toggle("collapsed"));
+    h.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("cleanOptPanel").classList.toggle("collapsed"); } });
+
+    // 특수문자 정보 아이콘
+    if (window.__infoTooltip && $("cleanSpecialInfo")) $("cleanSpecialInfo").appendChild(window.__infoTooltip.createIcon("clean_special"));
+
+    // 변환 방식 변경 시 파일 형식 재검증(기존 파일 상태 초기화)
+    document.querySelectorAll("input[name=convMode]").forEach((r) => r.addEventListener("change", () => { files.forEach((f) => { f.status = "wait"; f.message = ""; }); afterFilesChanged(); }));
+
+    $("btnCleanRun").addEventListener("click", runBatch);
+    $("btnCleanDownload").addEventListener("click", download);
+  })();
+
+  // 테스트용 노출
+  window.__clean = { convertOne, addFiles, runBatch, collectOpts, getOutputs: () => lastOutputs, getFiles: () => files, curMode };
 })();
 </script>
 </body>

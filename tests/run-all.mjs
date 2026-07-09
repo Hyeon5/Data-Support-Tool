@@ -18,6 +18,9 @@ const suites = [
   'deid_ui.mjs',     // 개인정보 비식별 UI 흐름
   'ui3_changes.mjs', // 접이식 기본/비활성 접힘, 레일, 히스토그램 줌, 비식별 열 순서
   'xlsx_preserve.mjs', // 원본 xlsx 서식 보존 저장
+  'cleaner.mjs',     // 데이터 정제 엔진(DataCleaner) 단위
+  'convert.mjs',     // 4종 형식 변환 + 인코딩(CP949) + 형식 불일치
+  'clean_ui.mjs',    // 정제·변환 UI 배치 처리 + ZIP 다운로드
   'ui_full.mjs',     // 전체 UI + 오프라인/네트워크 0
 ];
 

@@ -40,6 +40,9 @@ node tests/samples.mjs      # 개별 실행
 | `deid_ui.mjs` | 비식별 UI 흐름(업로드→탐지표→미리보기→다운로드) + 열 순서 |
 | `ui3_changes.mjs` | 접이식 기본 열림/비활성 접힘, 좌측 레일, 히스토그램 줌, 비식별 열 순서 |
 | `xlsx_preserve.mjs` | 원본 xlsx 서식(글꼴·열너비·행높이) 보존 저장 (`fixtures/formatted.xlsx`) |
+| `cleaner.mjs` | 데이터 정제 엔진(공백/제어/HTML/특수문자/`"-"→0`/빈값↔NULL/컬럼명) |
+| `convert.mjs` | 4종 형식 변환(XLSX↔CSV) + CP949 자동 인식 + 형식 불일치 오류 (`fixtures/*.csv`, `messy.xlsx`) |
+| `clean_ui.mjs` | 정제·변환 UI 배치 처리(다중 파일·성공/실패·진행률) + ZIP 다운로드 |
 | `ui_full.mjs` | 전체 UI 통합 + 외부 네트워크 요청 0건 |
 
 ## 참고

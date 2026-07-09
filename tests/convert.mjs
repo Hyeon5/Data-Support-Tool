@@ -1,0 +1,63 @@
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
+import { readFileSync, writeFileSync } from 'node:fs';
+const FX=new URL('./fixtures/', import.meta.url).pathname;
+const b64=p=>readFileSync(FX+p).toString('base64');
+const browser=await chromium.launch();const page=await browser.newPage();
+const errs=[];page.on('pageerror',e=>errs.push(e.message));page.on('console',m=>{if(m.type()==='error')errs.push(m.text());});
+await page.goto(new URL('../index.html', import.meta.url).href);
+let pass=0,fail=0;const ok=(n,c,d)=>{if(c){pass++;console.log('  OK',n);}else{fail++;console.log('  FAIL',n,'|',d);}};
+const conv=(fname,mode,opts)=>page.evaluate(async({fname,mode,opts,b64s})=>{
+  const bin=atob(b64s);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  const file=new File([arr],fname);
+  const res=await window.__clean.convertOne(file, mode, Object.assign({},window.__anomaly.DataCleaner.DEFAULTS,opts), 'bom','auto');
+  const outs=res.outputs.map(o=>{let s='';for(let i=0;i<o.data.length;i++)s+=String.fromCharCode(o.data[i]);return {name:o.name,kind:o.kind,b64:btoa(s)};});
+  return {outs, summary:res.summary};
+},{fname,mode,opts,b64s:0});
+async function convertFile(fname, mode, opts){
+  const b64s=b64(fname);
+  return await page.evaluate(async({fname,mode,opts,b64s})=>{
+    const bin=atob(b64s);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    const file=new File([arr],fname);
+    const o=Object.assign({},window.__anomaly.DataCleaner.DEFAULTS,opts);
+    const res=await window.__clean.convertOne(file, mode, o, (opts&&opts._csvout)||'bom', (opts&&opts._csvin)||'auto');
+    const outs=res.outputs.map(x=>{let s='';for(let i=0;i<x.data.length;i++)s+=String.fromCharCode(x.data[i]);return {name:x.name,kind:x.kind,b64:btoa(s)};});
+    return {outs, summary:res.summary};
+  },{fname,mode,opts,b64s});
+}
+const dec=(b64)=>Buffer.from(b64,'base64');
+console.log('[CSV -> CSV 정제 + BOM]');
+let r=await convertFile('dirty_utf8.csv','csv2csv',{dashToZero:true});
+ok('출력 1개 csv', r.outs.length===1 && r.outs[0].kind==='csv', JSON.stringify(r.outs.map(o=>o.name)));
+let buf=dec(r.outs[0].b64);
+ok('UTF-8 BOM 접두', buf[0]===0xEF&&buf[1]===0xBB&&buf[2]===0xBF, [buf[0],buf[1],buf[2]].join(','));
+let txt=buf.slice(3).toString('utf-8');
+ok('컬럼명/셀 정제됨', txt.includes('이름,금액,비고')&&txt.includes('홍길동'), JSON.stringify(txt));
+ok('금액 - -> 0', /\n김철수,0,/.test(txt), JSON.stringify(txt));
+ok('HTML/특수 정제', txt.includes('메모')&&!txt.includes('<b>')&&!txt.includes('!@#'), JSON.stringify(txt));
+console.log('[CSV -> XLSX]');
+r=await convertFile('dirty_utf8.csv','csv2xlsx',{dashToZero:true});
+ok('출력 xlsx', r.outs[0].kind==='xlsx'&&r.outs[0].name.endsWith('.xlsx'), r.outs[0].name);
+writeFileSync('/tmp/c2x.xlsx', dec(r.outs[0].b64));
+console.log('[UTF-8 BOM 입력 처리]');
+r=await convertFile('dirty_utf8bom.csv','csv2csv',{});
+txt=dec(r.outs[0].b64).slice(3).toString('utf-8');
+ok('BOM 입력 → 헤더에 BOM 잔존 안 함', txt.startsWith('이름')&&!txt.startsWith('\uFEFF'), JSON.stringify(txt.slice(0,10)));
+console.log('[CP949 CSV 자동 인식]');
+r=await convertFile('korean_cp949.csv','csv2csv',{});
+txt=dec(r.outs[0].b64).slice(3).toString('utf-8');
+ok('CP949 한글 정상 복원', txt.includes('홍길동')&&txt.includes('서울')&&txt.includes('부산'), JSON.stringify(txt));
+console.log('[XLSX -> CSV 다중 시트]');
+r=await convertFile('messy.xlsx','xlsx2csv',{dashToZero:true});
+ok('시트별 CSV 2개', r.outs.length===2 && r.outs.every(o=>o.kind==='csv'), JSON.stringify(r.outs.map(o=>o.name)));
+ok('시트명 파일명 반영', r.outs.some(o=>o.name.includes('자료'))&&r.outs.some(o=>o.name.includes('메모')), JSON.stringify(r.outs.map(o=>o.name)));
+console.log('[XLSX -> XLSX 정제+서식유지]');
+r=await convertFile('messy.xlsx','xlsx2xlsx',{dashToZero:true});
+ok('출력 xlsx 1개', r.outs.length===1&&r.outs[0].kind==='xlsx', r.outs[0].name);
+writeFileSync('/tmp/x2x.xlsx', dec(r.outs[0].b64));
+ok('요약 셀 변경 집계', (r.summary.cellsChanged||0)>=1 && (r.summary.dashToZero||0)===1, JSON.stringify(r.summary));
+console.log('[형식 불일치 오류]');
+let err='';try{await convertFile('dirty_utf8.csv','xlsx2xlsx',{});}catch(e){err=String(e.message||e);}
+ok('CSV를 XLSX모드에 넣으면 오류', /XLSX 파일만/.test(err), err);
+console.log('\n결과: '+pass+' passed / '+fail+' failed');
+console.log('page errors:', errs.length?errs:'none');
+await browser.close();process.exit(fail?1:0);
