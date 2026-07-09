@@ -209,8 +209,12 @@
   .bar-row{ display:flex; align-items:center; gap:8px; margin:4px 0; font-size:12px; color:#1a1a1a; }
   .bar-row .lbl{ flex:0 0 130px; text-align:right; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .bar-track{ flex:1; background:#eef2f7; border-radius:4px; height:16px; position:relative; }
-  .bar-fill{ height:100%; border-radius:4px; }
+  .bar-fill{ display:block; height:100%; border-radius:4px; }
   .bar-row .val{ flex:0 0 auto; font-weight:700; }
+  .bar-row .val .pct{ font-weight:400; color:#5a6b7b; font-size:11px; }
+  .hist .hbar{ cursor:default; }
+  .hist .hbar:hover{ fill:#7FB3D5; }
+  .hist .hmark:hover{ fill:#CA6F1E; }
   .viz-box select{ font-size:12px; }
 
   /* ===== 작업6: 스텝 인디케이터 + 진행 UX ===== */
@@ -2601,17 +2605,21 @@ const XlsxWriter = (function () {
       '<div class="sub">사용 알고리즘: ' + (usedAlgos.length ? escapeHtml(usedAlgos.join(", ")) : "-") + "</div></div>";
 
     // 사유별 가로 막대(인라인, 라이브러리 없음). 카테고리 색으로 채움.
-    const maxV = d.ruleBars.reduce((m, b) => Math.max(m, b[1]), 1);
+    // 전체 탐지 건수 합을 100% 로 두고, 각 사유가 차지하는 비율만큼 채워
+    // 건수 간 상대 비중을 한눈에 식별할 수 있게 한다.
+    const totalV = d.ruleBars.reduce((s, b) => s + b[1], 0) || 1;
     const ruleCatOf = {}; // 라벨 -> 카테고리(색)
     (result.findings || []).forEach((fs) => { if (fs) fs.forEach((f) => { ruleCatOf[RULE_LABEL[f.rule] || f.rule] = f.category; }); });
     const barColor = { rule: "#F5CBA7", stat: "#AED6F1", ml: "#D2B4DE" };
     const bars = d.ruleBars.length ? d.ruleBars.map((b) => {
-      const w = (b[1] / maxV * 100).toFixed(1);
+      const pct = b[1] / totalV * 100;
+      const w = pct.toFixed(1);
       const col = barColor[ruleCatOf[b[0]] || "rule"] || "#F5CBA7";
-      return '<div class="bar-row"><span class="lbl">' + escapeHtml(b[0]) + '</span>' +
+      return '<div class="bar-row" title="' + escapeHtml(b[0] + ": " + b[1] + "건 (전체의 " + w + "%)") + '"><span class="lbl">' + escapeHtml(b[0]) + '</span>' +
         '<span class="bar-track"><span class="bar-fill" style="width:' + w + "%;background:" + col + '"></span></span>' +
-        '<span class="val">' + b[1] + "</span></div>";
-    }).join("") : '<div class="sub">표시할 사유가 없습니다.</div>';
+        '<span class="val">' + b[1] + '건 <span class="pct">' + w + "%</span></span></div>";
+    }).join("") + '<div class="sub" style="margin-top:6px">막대 길이 = 전체 탐지 ' + totalV.toLocaleString() + "건 중 차지 비율</div>"
+      : '<div class="sub">표시할 사유가 없습니다.</div>';
 
     // 히스토그램용 숫자 컬럼 옵션
     const numCols = (result.infos || []).filter((i) => i.type === "Number").map((i) => i.name);
@@ -2642,6 +2650,8 @@ const XlsxWriter = (function () {
   }
 
   // 인라인 SVG 히스토그램 + 이상치 위치 표시(외부 라이브러리 없음)
+  // - 막대 hover 시 구간 범위·건수·비율 툴팁(<title>) 표시
+  // - 세로축(수치값)과 가로 눈금선으로 정확한 건수를 읽을 수 있게 한다.
   function renderHistogram(result, colName) {
     const idx = result.table.columns.indexOf(colName);
     if (idx < 0) { $("histBox").innerHTML = ""; return; }
@@ -2650,30 +2660,49 @@ const XlsxWriter = (function () {
     if (!vals.length) { $("histBox").innerHTML = '<div class="muted">표시할 값이 없습니다.</div>'; return; }
     let mn = Infinity, mx = -Infinity; for (const [, v] of vals) { if (v < mn) mn = v; if (v > mx) mx = v; }
     if (mn === mx) { mx = mn + 1; }
-    const BINS = 24, W = 320, H = 120, PAD = 4;
+    const BINS = 24, W = 340, H = 120, PADL = 34, PADR = 6, PADT = 6;
+    const plotW = W - PADL - PADR;
     const counts = new Array(BINS).fill(0);
     const binOf = (v) => Math.min(BINS - 1, Math.floor((v - mn) / (mx - mn) * BINS));
     for (const [, v] of vals) counts[binOf(v)]++;
     const maxC = counts.reduce((m, c) => Math.max(m, c), 1);
+    const fmt = (x) => Values.fmtNum(Math.round(x * 100) / 100);
     // 이 컬럼에서 이상으로 판정된 행 집합
     const anomRows = new Set();
     (result.findings || []).forEach((fs, r) => { if (fs && fs.some((f) => f.column === colName)) anomRows.add(r); });
-    const bw = (W - PAD * 2) / BINS;
-    let svg = '<svg viewBox="0 0 ' + W + " " + (H + 22) + '" width="100%" style="max-width:360px" role="img" aria-label="' + escapeHtml(colName) + ' 분포">';
-    for (let b = 0; b < BINS; b++) {
-      const h = counts[b] / maxC * H;
-      svg += '<rect x="' + (PAD + b * bw + 0.5) + '" y="' + (H - h) + '" width="' + (bw - 1) + '" height="' + h + '" fill="#AED6F1"/>';
+    const bw = plotW / BINS;
+    const yOf = (c) => PADT + (1 - c / maxC) * (H - PADT);
+    let svg = '<svg viewBox="0 0 ' + W + " " + (H + 24) + '" width="100%" style="max-width:380px" role="img" aria-label="' + escapeHtml(colName) + ' 분포" class="hist">';
+    // 세로축(건수) + 가로 눈금선: 최대 건수를 나눠 보기 좋은 눈금을 만든다.
+    const tickCount = maxC <= 4 ? maxC : 4;
+    for (let t = 0; t <= tickCount; t++) {
+      const cVal = Math.round(maxC * t / tickCount);
+      const y = yOf(cVal);
+      svg += '<line x1="' + PADL + '" y1="' + y + '" x2="' + (W - PADR) + '" y2="' + y + '" stroke="#eef2f7"/>';
+      svg += '<text x="' + (PADL - 4) + '" y="' + (y + 3) + '" font-size="9" fill="#5a6b7b" text-anchor="end">' + cVal.toLocaleString() + "</text>";
     }
-    // 이상치 위치를 축 아래 살구색 삼각형으로 표시
+    svg += '<line x1="' + PADL + '" y1="' + PADT + '" x2="' + PADL + '" y2="' + H + '" stroke="#c9d0dc"/>'; // 세로축
+    // 막대(+hover 툴팁)
+    const binW = (mx - mn) / BINS;
+    for (let b = 0; b < BINS; b++) {
+      const h = counts[b] / maxC * (H - PADT);
+      const lo = mn + b * binW, hi = mn + (b + 1) * binW;
+      const pct = (counts[b] / vals.length * 100).toFixed(1);
+      svg += '<rect class="hbar" x="' + (PADL + b * bw + 0.5) + '" y="' + (H - h) + '" width="' + (bw - 1) + '" height="' + h + '" fill="#AED6F1">' +
+        "<title>" + escapeHtml("구간 " + fmt(lo) + " ~ " + fmt(hi) + "\n건수 " + counts[b].toLocaleString() + "건 (" + pct + "%)") + "</title></rect>";
+    }
+    // 이상치 위치를 축 아래 살구색 삼각형으로 표시(hover 시 행 번호·값)
     for (const r of anomRows) {
       const v = Values.toNumber(result.table.rows[r][idx]); if (v === null) continue;
-      const x = PAD + (v - mn) / (mx - mn) * (W - PAD * 2);
-      svg += '<polygon points="' + x + "," + (H + 2) + " " + (x - 3) + "," + (H + 9) + " " + (x + 3) + "," + (H + 9) + '" fill="#E67E22"/>';
+      const x = PADL + (v - mn) / (mx - mn) * plotW;
+      svg += '<polygon class="hmark" points="' + x + "," + (H + 2) + " " + (x - 3) + "," + (H + 9) + " " + (x + 3) + "," + (H + 9) + '" fill="#E67E22">' +
+        "<title>" + escapeHtml("이상치 · " + (r + 2) + "행 · 값 " + fmt(v)) + "</title></polygon>";
     }
-    svg += '<line x1="' + PAD + '" y1="' + H + '" x2="' + (W - PAD) + '" y2="' + H + '" stroke="#c9d0dc"/>';
-    svg += '<text x="' + PAD + '" y="' + (H + 20) + '" font-size="10" fill="#5a6b7b">' + escapeHtml(Values.fmtNum(Math.round(mn * 100) / 100)) + "</text>";
-    svg += '<text x="' + (W - PAD) + '" y="' + (H + 20) + '" font-size="10" fill="#5a6b7b" text-anchor="end">' + escapeHtml(Values.fmtNum(Math.round(mx * 100) / 100)) + "</text>";
-    svg += "</svg><div class='muted' style='font-size:11px'>▲ 살구색 표식 = 이상치 위치 (" + anomRows.size + "건)</div>";
+    svg += '<line x1="' + PADL + '" y1="' + H + '" x2="' + (W - PADR) + '" y2="' + H + '" stroke="#c9d0dc"/>';
+    svg += '<text x="' + PADL + '" y="' + (H + 20) + '" font-size="10" fill="#5a6b7b">' + escapeHtml(fmt(mn)) + "</text>";
+    svg += '<text x="' + (PADL + plotW / 2) + '" y="' + (H + 20) + '" font-size="10" fill="#5a6b7b" text-anchor="middle">' + escapeHtml(fmt((mn + mx) / 2)) + "</text>";
+    svg += '<text x="' + (W - PADR) + '" y="' + (H + 20) + '" font-size="10" fill="#5a6b7b" text-anchor="end">' + escapeHtml(fmt(mx)) + "</text>";
+    svg += "</svg><div class='muted' style='font-size:11px'>세로축 = 구간별 건수 · 막대에 마우스를 올리면 정확한 범위/건수가 표시됩니다 · ▲ 표식 = 이상치 위치 (" + anomRows.size + "건)</div>";
     $("histBox").innerHTML = svg;
   }
 
