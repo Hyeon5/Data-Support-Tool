@@ -24,8 +24,9 @@ console.log('[기능 #2 초기 비활성 상태]');
 check('IF/LOF/DBSCAN 미체크 → 파라미터 disabled',
   await page.$eval('#p_contam', e => e.disabled) && await page.$eval('#p_neighbors', e => e.disabled) &&
   await page.$eval('#p_eps', e => e.disabled) && await page.$eval('#p_minsamples', e => e.disabled), '');
-check('체크된 알고리즘(증감률/Z) 파라미터 enabled',
-  !(await page.$eval('#p_change', e => e.disabled)) && !(await page.$eval('#p_zscore', e => e.disabled)), '');
+check('기본 해제된 증감률 → p_change disabled', await page.$eval('#p_change', e => e.disabled), '');
+check('체크된 알고리즘(Z-Score) 파라미터 enabled', !(await page.$eval('#p_zscore', e => e.disabled)), '');
+check('증감률 체크 시 p_change 활성', await (async()=>{ await page.check('#opt_change'); const r=!(await page.$eval('#p_change',e=>e.disabled)); await page.uncheck('#opt_change'); return r; })(), '');
 // 체크 → 활성화, 해제 → 비활성 + 값 유지
 await page.check('#opt_dbscan');
 check('DBSCAN 체크 시 eps/min_samples 활성', !(await page.$eval('#p_eps', e => e.disabled)) && !(await page.$eval('#p_minsamples', e => e.disabled)), '');

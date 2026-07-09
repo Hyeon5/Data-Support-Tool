@@ -67,6 +67,24 @@ const tr2 = await page.evaluate(() => {
 });
 ok(tr2[0][0]===tr2[2][0] && tr2[0][0]!==tr2[1][0],'pseudonym 동일 원본 동일 가명');
 
+// ---- 오탐 개선: 날짜/계좌 재점검 ----
+console.log('[탐지 오탐 개선(날짜/계좌)]');
+const det2 = (cols,rows)=>page.evaluate(({cols,rows})=>{
+  const D=window.__anomaly.DeidEngine; return D.detect(cols,rows).map(d=>({column:d.column,type:d.type,detected:d.detected}));
+},{cols,rows});
+let dd = await det2(['등록일','가입일'],[['2026-01-01','2025/12/31'],['2024-06-15','2023.03.01'],['2022-11-11','2021-01-01']]);
+const ddm = Object.fromEntries(dd.map(d=>[d.column,d]));
+ok(ddm['등록일'].type!=='account' && !ddm['등록일'].detected, '등록일(날짜) → 계좌 오탐 아님/미탐지 '+JSON.stringify(ddm['등록일']));
+ok(!ddm['가입일'].detected, '가입일(날짜) 미탐지 '+JSON.stringify(ddm['가입일']));
+let acc = await det2(['계좌번호'],[['123-456789-01'],['302-1234-5678-99'],['110-234-567890']]);
+ok(acc[0].type==='account' && acc[0].detected, '실제 계좌번호 → account '+JSON.stringify(acc[0]));
+let code = await det2(['코드'],[['123456789012'],['234567890123'],['345678901234']]);
+ok(!code[0].detected, '구분자 없는 12자리 숫자 → 미탐지(계좌/면허 오탐 아님) '+JSON.stringify(code[0]));
+let lic = await det2(['면허번호'],[['11-23-456789-01'],['12-34-567890-12'],['21-11-222333-44']]);
+ok(lic[0].type==='license' && lic[0].detected, '실제 운전면허번호 → license '+JSON.stringify(lic[0]));
+let bd = await det2(['생년월일'],[['1990-05-21'],['1985-01-01'],['2000-12-31']]);
+ok(bd[0].type==='birth' && bd[0].detected, '생년월일 컬럼 → birth 유지 '+JSON.stringify(bd[0]));
+
 console.log(`\n결과: ${pass} passed / ${fail} failed`);
 console.log('page errors:', errs.length?errs:'none');
 await browser.close();

@@ -27,6 +27,11 @@ ok('csv 2개 성공', statuses.filter(s=>s.startsWith('ok')).length===2, JSON.st
 ok('xlsx 1개 실패(형식불일치)', statuses.filter(s=>s.startsWith('err')).length===1, JSON.stringify(statuses));
 ok('결과 패널 표시', !(await page.evaluate(()=>document.getElementById('cleanResultPanel').classList.contains('hidden'))), '');
 ok('요약 카드', await page.evaluate(()=>document.getElementById('cleanSummary').textContent.includes('정제·변환 요약')), '');
+ok('이모지 제거 옵션 없음', await page.evaluate(()=>!document.getElementById('cl_emoji')), '');
+const th0 = await page.$$eval('#cleanResultTable thead th', els=>els.map(e=>e.textContent));
+ok('결과표 첫 열 = 변환 후 파일', th0[0]==='변환 후 파일', JSON.stringify(th0));
+const firstOut = await page.$eval('#cleanResultTable tbody tr:first-child td:first-child', e=>e.textContent);
+ok('변환 후 파일명 표기(.csv)', /\.csv$/.test(firstOut.trim()), firstOut);
 ok('진행률 100%', (await page.$eval('#cleanProgress',e=>parseFloat(e.style.width)||0))>=100, '');
 ok('다운로드 힌트 ZIP', (await page.textContent('#cleanDownHint')).includes('ZIP'), await page.textContent('#cleanDownHint'));
 await page.click('#btnCleanDownload');

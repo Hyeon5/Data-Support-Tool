@@ -369,9 +369,9 @@
       <label><input type="checkbox" id="opt_missing" checked> 결측치 탐지</label>
       <label><input type="checkbox" id="opt_duplicate" checked> 중복 데이터 탐지</label>
       <label><input type="checkbox" id="opt_range" checked> 범위 검사</label>
-      <label><input type="checkbox" id="opt_change" checked> 증감률 검사</label>
       <label><input type="checkbox" id="opt_iqr" checked> IQR</label>
       <label><input type="checkbox" id="opt_zscore" checked> Z-Score</label>
+      <label><input type="checkbox" id="opt_change"> 증감률 검사</label>
       <label><input type="checkbox" id="opt_iforest"> Isolation Forest</label>
       <label><input type="checkbox" id="opt_lof"> Local Outlier Factor (LOF)</label>
       <label><input type="checkbox" id="opt_dbscan"> DBSCAN</label>
@@ -691,7 +691,6 @@
       </div>
       <div class="clean-optgroup muted">선택 옵션</div>
       <div class="grid-opts clean-opts">
-        <label><input type="checkbox" id="cl_emoji"> 이모지 제거</label>
         <label><input type="checkbox" id="cl_emptynull"> 빈 문자열 → NULL</label>
         <label><input type="checkbox" id="cl_nullempty"> NULL → 빈 문자열</label>
         <label><input type="checkbox" id="cl_dashzero"> "-" 값을 0으로 치환 (숫자 컬럼)</label>
@@ -1494,37 +1493,50 @@ const DeidEngine = (function () {
     { key: "passport", label: "여권번호", names: ["여권번호", "여권"],
       re: /^[A-Za-z][A-Za-z0-9]\d{7}$|^[Mm]\d{8}$/, defMethod: "delete" },
     { key: "license", label: "운전면허번호", names: ["운전면허", "면허번호", "면허"],
-      re: /^\d{2}[-\s]?\d{2}[-\s]?\d{6}[-\s]?\d{2}$/, defMethod: "delete" },
+      re: /^\d{2}[-\s]\d{2}[-\s]\d{6}[-\s]\d{2}$/, noDate: true, defMethod: "delete" },
     { key: "phone", label: "휴대전화번호", names: ["휴대폰", "핸드폰", "휴대전화", "휴대"],
       re: /^01[016789][-\s]?\d{3,4}[-\s]?\d{4}$/, defMethod: "mask" },
     { key: "email", label: "이메일", names: ["이메일", "메일", "email", "e-mail"],
       re: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, defMethod: "mask" },
     { key: "card", label: "카드번호", names: ["카드번호", "신용카드", "카드"],
-      re: /^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,4}$/, luhn: true, defMethod: "mask" },
+      re: /^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{1,4}$/, luhn: true, noDate: true, defMethod: "mask" },
+    // 계좌번호: 구분자(-/공백) 필수 + 총 10~16자리 + 날짜형 제외 → '2026-01-01' 같은 날짜 오탐 방지
     { key: "account", label: "계좌번호", names: ["계좌번호", "계좌", "예금주계좌"],
-      re: /^\d{2,6}[-\s]?\d{2,6}[-\s]?\d{2,6}([-\s]?\d{1,6})?$/, defMethod: "mask" },
+      re: /^\d{2,6}([-\s]\d{2,6}){1,4}$/, digits: [10, 16], noDate: true, defMethod: "mask" },
     { key: "bizno", label: "사업자등록번호", names: ["사업자등록번호", "사업자번호", "사업자"],
-      re: /^\d{3}[-\s]?\d{2}[-\s]?\d{5}$/, defMethod: "mask" },
+      re: /^\d{3}[-\s]?\d{2}[-\s]?\d{5}$/, digits: [10, 10], noDate: true, defMethod: "mask" },
     { key: "corpno", label: "법인등록번호", names: ["법인등록번호", "법인번호"],
-      re: /^\d{6}[-\s]?\d{7}$/, defMethod: "mask" },
+      re: /^\d{6}[-\s]?\d{7}$/, digits: [13, 13], noDate: true, defMethod: "mask" },
     { key: "tel", label: "전화번호(유선)", names: ["전화번호", "연락처", "전화", "tel"],
-      re: /^0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}$/, defMethod: "mask" },
+      re: /^0\d{1,2}[-\s]?\d{3,4}[-\s]?\d{4}$/, noDate: true, defMethod: "mask" },
+    // 생년월일: 값 패턴이 '모든 날짜'와 겹치므로 컬럼명 확인이 없으면 약하게 취급(등록일/가입일 등 오탐 방지)
     { key: "birth", label: "생년월일", names: ["생년월일", "생일", "출생일", "birth"],
-      re: /^(19|20)\d{2}[-./]?(0[1-9]|1[0-2])[-./]?(0[1-9]|[12]\d|3[01])$|^\d{6}$/, defMethod: "generalize" },
+      re: /^(19|20)\d{2}[-./]?(0[1-9]|1[0-2])[-./]?(0[1-9]|[12]\d|3[01])$|^\d{6}$/, weakValue: true, defMethod: "generalize" },
     { key: "ip", label: "IP 주소", names: ["ip", "아이피", "ip주소"],
       re: /^(\d{1,3}\.){3}\d{1,3}$/, defMethod: "mask" },
     { key: "address", label: "주소", names: ["주소", "소재지", "거주지", "address"],
       re: /(특별시|광역시|특별자치시|특별자치도|도\s|시\s|군\s|구\s|읍\s|면\s|동\s|로\s|길\s|번지|[가-힣]+시\s|[가-힣]+구\s|[가-힣]+동)/, defMethod: "generalize" },
     { key: "name", label: "성명", names: ["성명", "이름", "성함", "대표자", "담당자", "예금주"],
-      re: /^[가-힣]{2,4}$/, defMethod: "mask" },
+      re: /^[가-힣]{2,4}$/, weakValue: true, defMethod: "mask" },
   ];
   // 개인정보가 아닌 사업체/시설 명칭 컬럼은 탐지 대상에서 제외
   const EXCLUDE_NAME = /(산단명|공장명|기업명|업체명|회사명|상호명|상호|법인명|기관명|부서명|제품명|품명|장비명)/;
 
+  const digitsOf = (v) => v.replace(/[^0-9]/g, "");
+  // 값이 날짜(YYYY-MM-DD, YYYY.MM.DD, DD/MM/YYYY 등)로 해석되면 true
+  function isDateLike(v) {
+    const t = String(v).trim();
+    if (Values.toDate(t) !== null) return true;
+    if (/^(19|20)\d{2}\s*[-.\/]\s*(0?[1-9]|1[0-2])\s*[-.\/]\s*(0?[1-9]|[12]\d|3[01])$/.test(t)) return true;
+    if (/^(0?[1-9]|[12]\d|3[01])\s*[-.\/]\s*(0?[1-9]|1[0-2])\s*[-.\/]\s*(19|20)?\d{2}$/.test(t)) return true;
+    return false;
+  }
   function valTest(t, v) {
     if (!t.re) return false;
     if (!t.re.test(v)) return false;
-    if (t.luhn) return luhnOk(v.replace(/[-\s]/g, ""));
+    if (t.noDate && isDateLike(v)) return false;                 // 날짜 오탐 차단
+    if (t.digits) { const n = digitsOf(v).length; if (n < t.digits[0] || n > t.digits[1]) return false; }
+    if (t.luhn) return luhnOk(digitsOf(v));
     return true;
   }
 
@@ -1545,8 +1557,9 @@ const DeidEngine = (function () {
         let matched = 0;
         for (const v of vals) if (valTest(t, v)) matched++;
         const rate = vals.length ? matched / vals.length : 0;
-        // 성명은 값 패턴이 매우 느슨하므로 컬럼명 일치가 없으면 값 점수를 크게 낮춘다.
-        const valueWeight = (t.key === "name" && !nameHit) ? 0.15 : 0.5;
+        // 성명·생년월일 등 값 패턴이 느슨한 유형은 컬럼명 일치가 없으면 값 점수를 크게 낮춘다
+        // (등록일·가입일 같은 일반 날짜 컬럼이 생년월일/계좌로 오탐되는 것을 막는다).
+        const valueWeight = (t.weakValue && !nameHit) ? 0.15 : 0.5;
         const score = (nameHit ? 0.5 : 0) + rate * valueWeight;
         if (score > 0 && (!best || score > best.score)) best = { t, score, rate, nameHit };
       }
@@ -5203,14 +5216,14 @@ window.__infoTooltip = InfoTooltip;
       removeInvisible: $("cl_invisible").checked,
       cleanColSpace: $("cl_colspace").checked, cleanColSpecial: $("cl_colspecial").checked,
       specialMode: (document.querySelector("input[name=clSpecial]:checked") || {}).value || "common",
-      removeEmoji: $("cl_emoji").checked, emptyToNull: $("cl_emptynull").checked,
+      emptyToNull: $("cl_emptynull").checked,
       nullToEmpty: $("cl_nullempty").checked, dashToZero: $("cl_dashzero").checked,
     };
   }
   function anyClean(o) {
     return o.specialMode !== "keep" || o.trimSpace || o.collapseSpace || o.removeNewline || o.removeTab ||
       o.removeControl || o.removeHtml || o.removeInvisible || o.cleanColSpace || o.cleanColSpecial ||
-      o.removeEmoji || o.emptyToNull || o.nullToEmpty || o.dashToZero;
+      o.emptyToNull || o.nullToEmpty || o.dashToZero;
   }
   const CTX_KEYS = ["specialRemoved", "controlRemoved", "columnsCleaned", "cellsChanged", "dashToZero", "htmlRemoved"];
   function mergeCtx(agg, c) { CTX_KEYS.forEach((k) => { agg[k] = (agg[k] || 0) + (c[k] || 0); }); if (c.sheetCount) agg.sheetCount = (agg.sheetCount || 0) + c.sheetCount; }
@@ -5327,9 +5340,10 @@ window.__infoTooltip = InfoTooltip;
         res.outputs.forEach((o) => lastOutputs.push(o));
         mergeCtx(agg, res.summary);
         outCount += res.outputs.length; okCount++;
-        entry.status = "ok"; entry.message = res.outputs.length > 1 ? res.outputs.length + "개 파일" : "";
+        entry.status = "ok"; entry.outNames = res.outputs.map((o) => o.name);
+        entry.message = res.outputs.length > 1 ? res.outputs.length + "개 파일" : "";
       } catch (e) {
-        entry.status = "err"; entry.message = String((e && e.message) || e);
+        entry.status = "err"; entry.outNames = null; entry.message = String((e && e.message) || e);
       }
       renderFileList();
     }
@@ -5347,7 +5361,7 @@ window.__infoTooltip = InfoTooltip;
     if (o.removeControl) on.push("제어문자"); if (o.removeHtml) on.push("HTML");
     if (o.removeInvisible) on.push("숨은 문자");
     on.push("특수문자:" + ({ keep: "유지", common: "일반 제거", all: "모두 제거" }[o.specialMode]));
-    if (o.removeEmoji) on.push("이모지 제거"); if (o.emptyToNull) on.push("빈값→NULL");
+    if (o.emptyToNull) on.push("빈값→NULL");
     if (o.nullToEmpty) on.push("NULL→빈값"); if (o.dashToZero) on.push('"-"→0');
     if (o.cleanColSpace || o.cleanColSpecial) on.push("컬럼명 정리");
     return on.join(" · ");
@@ -5365,11 +5379,13 @@ window.__infoTooltip = InfoTooltip;
       '</div><p class="muted" style="margin-top:10px;">적용된 정제 옵션: ' + esc(optSummaryText(opts)) + "</p></div>";
 
     const tb = $("cleanResultTable");
-    tb.querySelector("thead").innerHTML = "<tr><th>파일</th><th>상태</th><th>결과/사유</th></tr>";
+    tb.querySelector("thead").innerHTML = "<tr><th>변환 후 파일</th><th>원본 파일</th><th>상태</th><th>결과/사유</th></tr>";
     tb.querySelector("tbody").innerHTML = files.map((f) => {
       const cls = f.status === "ok" ? "ok" : "err";
       const label = f.status === "ok" ? "성공" : "실패";
-      return "<tr><td>" + esc(f.file.name) + '</td><td class="cf-status ' + cls + '">' + label + "</td><td>" + esc(f.message || "") + "</td></tr>";
+      // 변환 후 파일명(성공 시 실제 출력 파일명, 실패 시 '-')
+      const outName = (f.status === "ok" && f.outNames && f.outNames.length) ? f.outNames.join(", ") : "-";
+      return "<tr><td>" + esc(outName) + "</td><td class=\"muted\">" + esc(f.file.name) + '</td><td class="cf-status ' + cls + '">' + label + "</td><td>" + esc(f.message || "") + "</td></tr>";
     }).join("");
 
     $("cleanDownHint").textContent = lastOutputs.length > 1 ? "파일 " + lastOutputs.length + "개를 ZIP으로 내려받습니다." : "";

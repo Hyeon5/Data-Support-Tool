@@ -20,7 +20,7 @@ const upload = (b64s,name)=>page.evaluate(async ({b64s,name})=>{
 console.log('[A-1 파라미터 클램프(0/음수/공백)]');
 await upload(b64(`${DIR}/sample_10_종합1_2023산단현황.csv`),'s.csv');
 // 잘못된 값 주입 후 분석 실행 → collectConfig 가 입력창에 보정값을 반영
-await page.evaluate(()=>{ ['opt_iforest','opt_lof','opt_dbscan'].forEach(id=>{const e=document.getElementById(id);e.checked=true;e.dispatchEvent(new Event('change',{bubbles:true}));}); });
+await page.evaluate(()=>{ ['opt_change','opt_iforest','opt_lof','opt_dbscan'].forEach(id=>{const e=document.getElementById(id);e.checked=true;e.dispatchEvent(new Event('change',{bubbles:true}));}); });
 await page.fill('#p_change','-10');
 await page.fill('#p_zscore','0');
 await page.fill('#p_neighbors','0.5');
