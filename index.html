@@ -183,7 +183,7 @@
   /* ===== C-2: 좌측 레일(항상 펼침 180px) ===== */
   .shell{ display:flex; align-items:flex-start; }
   .rail{ flex:0 0 180px; width:180px; overflow:hidden; background:#eef2f8;
-    border-right:1px solid var(--line); position:sticky; top:0; height:100vh; z-index:5;
+    border-right:1px solid var(--line); position:sticky; top:0; height:calc(100vh - 88px); z-index:5;
     display:flex; flex-direction:column; }
   .rail-btn{ width:180px; display:flex; align-items:center; gap:12px; background:transparent;
     color:#42505f; font-weight:600; padding:14px 16px; border-radius:0; white-space:nowrap;
@@ -294,7 +294,7 @@
   :root{ color-scheme:light; }
   .theme-switch{ margin-top:auto; padding:12px; border-top:1px solid var(--line); flex:0 0 auto; }
   .theme-switch-title{ display:block; font-size:11px; font-weight:700; color:var(--muted);
-    margin:0 2px 7px; letter-spacing:.2px; }
+    margin:0 2px 7px; letter-spacing:.2px; text-align:center; }
   .theme-switch-btns{ display:flex; gap:6px; background:rgba(120,130,150,.16); border-radius:10px; padding:4px; }
   .theme-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
     background:transparent; color:var(--muted); font-size:11px; font-weight:600;
