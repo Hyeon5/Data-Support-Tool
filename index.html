@@ -1,14 +1,17 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>데이터 이상치 탐지 프로그램</title>
 <style>
-  :root{
-    --bg:#f4f6f9; --panel:#ffffff; --line:#dfe3e8; --text:#1f2933;
-    --muted:#616e7c; --accent:#2f6fed; --accent-dark:#1f52c0;
+  /* ☀️ 라이트 테마(Corporate Ocean) — 기본값 */
+  :root, :root[data-theme="light"]{
+    --bg:#eef2f7; --panel:#ffffff; --line:#e3e8f0; --text:#15202b;
+    --muted:#5f6b7a; --accent:#2563eb; --accent-dark:#1d4ed8;
     --anomaly:#FFF2CC; --ok:#2e7d32; --warn:#b23c17;
+    --header-grad:linear-gradient(135deg,#2563eb,#1d4ed8);
+    --panel-shadow:0 1px 2px rgba(16,32,64,.05), 0 8px 24px -14px rgba(16,32,64,.16);
   }
   *{box-sizing:border-box;}
   body{
@@ -16,15 +19,15 @@
     background:var(--bg); color:var(--text); font-size:14px; line-height:1.5;
   }
   header{
-    background:linear-gradient(135deg,#2f6fed,#1f52c0); color:#fff;
+    background:var(--header-grad); color:#fff;
     padding:18px 24px;
   }
   header h1{margin:0; font-size:20px;}
   header p{margin:4px 0 0; font-size:12px; opacity:.85;}
   .wrap{max-width:1080px; margin:0 auto; padding:20px;}
   .panel{
-    background:var(--panel); border:1px solid var(--line); border-radius:10px;
-    padding:16px 18px; margin-bottom:16px;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:16px 18px; margin-bottom:16px; box-shadow:var(--panel-shadow);
   }
   .panel h2{
     margin:0 0 12px; font-size:15px; display:flex; align-items:center; gap:8px;
@@ -180,7 +183,8 @@
   /* ===== C-2: 좌측 레일(항상 펼침 180px) ===== */
   .shell{ display:flex; align-items:flex-start; }
   .rail{ flex:0 0 180px; width:180px; overflow:hidden; background:#eef2f8;
-    border-right:1px solid var(--line); position:sticky; top:0; height:100vh; z-index:5; }
+    border-right:1px solid var(--line); position:sticky; top:0; height:100vh; z-index:5;
+    display:flex; flex-direction:column; }
   .rail-btn{ width:180px; display:flex; align-items:center; gap:12px; background:transparent;
     color:#42505f; font-weight:600; padding:14px 16px; border-radius:0; white-space:nowrap;
     border-left:3px solid transparent; }
@@ -285,6 +289,70 @@
   tr.rv-오탐 td{ background:#EAECEE !important; }
   tr.rv-수정필요 td{ background:#FCF3CF !important; }
   .rv-memo{ width:110px; border:1px solid var(--line); border-radius:4px; padding:2px 4px; font-size:12px; }
+
+  /* ===== 좌측 사이드바 하단: 화면 테마 토글(라이트/다크) ===== */
+  :root{ color-scheme:light; }
+  .theme-switch{ margin-top:auto; padding:12px; border-top:1px solid var(--line); flex:0 0 auto; }
+  .theme-switch-title{ display:block; font-size:11px; font-weight:700; color:var(--muted);
+    margin:0 2px 7px; letter-spacing:.2px; }
+  .theme-switch-btns{ display:flex; gap:6px; background:rgba(120,130,150,.16); border-radius:10px; padding:4px; }
+  .theme-btn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;
+    background:transparent; color:var(--muted); font-size:11px; font-weight:600;
+    padding:7px 4px; border-radius:7px; box-shadow:none; border:0; cursor:pointer; }
+  .theme-btn:hover{ background:rgba(120,130,150,.14); color:var(--text); }
+  .theme-btn.active{ background:var(--panel); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.16); }
+  .theme-btn .tico{ font-size:15px; line-height:1; }
+
+  /* ===== 🌙 다크 테마(Midnight Dark) ===== */
+  :root[data-theme="dark"]{
+    color-scheme:dark;
+    --bg:#0f172a; --panel:#1b2537; --line:#2b3a52; --text:#e6edf6;
+    --muted:#93a3b8; --accent:#38bdf8; --accent-dark:#0ea5e9;
+    --header-grad:linear-gradient(135deg,#1b2a44,#0f1b2e);
+    --panel-shadow:0 10px 30px -16px rgba(0,0,0,.6);
+  }
+  [data-theme="dark"] body{ background:radial-gradient(1100px 480px at 82% -8%,#17233c 0%,#0f172a 62%); }
+  /* 레일 */
+  [data-theme="dark"] .rail{ background:#111c30; border-right-color:#22314a; }
+  [data-theme="dark"] .rail-btn{ color:#aebccf; }
+  [data-theme="dark"] .rail-btn:hover{ background:#17233b; }
+  [data-theme="dark"] .rail-btn.active{ background:#0d1626; color:#7dd3fc; border-left-color:#38bdf8; }
+  /* 폼/버튼 */
+  [data-theme="dark"] button{ color:#04121f; }
+  [data-theme="dark"] button.secondary{ background:#26344b; color:#cfdbec; }
+  [data-theme="dark"] button.secondary:hover{ background:#324459; }
+  [data-theme="dark"] button.danger{ background:#7f3b39; color:#ffe3e0; }
+  [data-theme="dark"] .theme-btn{ color:#93a3b8; }
+  [data-theme="dark"] .theme-btn:hover{ background:rgba(255,255,255,.06); color:#e6edf6; }
+  [data-theme="dark"] .theme-btn.active{ background:#0d1626; color:#7dd3fc; }
+  [data-theme="dark"] input[type=text], [data-theme="dark"] input[type=number],
+  [data-theme="dark"] select, [data-theme="dark"] textarea{
+    background:#101a2c; color:#dbe6f3; border-color:#33425c; }
+  [data-theme="dark"] .conv-mode{ background:#141f33; border-color:#2b3a52; }
+  [data-theme="dark"] .conv-mode:hover{ background:#18243a; }
+  [data-theme="dark"] .clean-file{ background:#141f33; border-color:#2b3a52; }
+  /* 설정용 표: 헤더 어둡게, 본문은 패널 위 밝은 글자(자동) */
+  [data-theme="dark"] th{ background:#182238; color:#cdd9e8; }
+  [data-theme="dark"] th, [data-theme="dark"] td{ border-color:#2b3a52; }
+  [data-theme="dark"] .tbl-scroll, [data-theme="dark"] .ma-list{ border-color:#2b3a52; }
+  [data-theme="dark"] .progress-outer{ background:#26344b; }
+  [data-theme="dark"] .runbar{ border-top-color:#2b3a52; }
+  [data-theme="dark"] .summary .stat{ background:#182238; color:var(--text); }
+  /* 드롭존/보조 */
+  [data-theme="dark"] .dropzone{ background:#12203a; border-color:#3a4d6b; }
+  [data-theme="dark"] .dz-error{ color:#fca5a5; }
+  [data-theme="dark"] .dz-clear{ background:#26344b; color:#cfdbec; }
+  [data-theme="dark"] .info-icon{ border-color:#3a4d6b; color:#6b7c93; }
+  [data-theme="dark"] .set-off label, [data-theme="dark"] .panel.set-off > h2{ color:#5b6b80; }
+  [data-theme="dark"] .mode-tab{ background:#22314a; color:#aebccf; }
+  [data-theme="dark"] .mode-tab:hover{ background:#2b3c58; }
+  [data-theme="dark"] .review-bar{ color:var(--text); }
+  /* 결과·비교 표: 값이 고정 진한 글자(#1a1a1a)이므로 밝은 표면 유지(가독성 보존) */
+  [data-theme="dark"] #resultTable, [data-theme="dark"] #cmpTable{ background:#f5f7fa; }
+  [data-theme="dark"] #resultTable th, [data-theme="dark"] #cmpTable th{ background:#e6ebf2; color:#1a1a1a; }
+  [data-theme="dark"] #cmpTable td{ color:#1a1a1a; }
+  /* 대시보드 그래프 박스: 내부 글자가 고정 진한색이라 밝은 표면 유지 */
+  [data-theme="dark"] .viz-box{ background:#ffffff; }
 </style>
 </head>
 <body>
@@ -315,6 +383,18 @@
     <button type="button" class="rail-btn" id="railClean" role="tab" aria-selected="false">
       <span class="ico" aria-hidden="true">🧹</span><span class="lbl">정제·형식 변환</span>
     </button>
+    <!-- 좌측 사이드바 하단: 화면 테마(라이트/다크) 선택 -->
+    <div class="theme-switch" role="group" aria-label="화면 테마 선택">
+      <span class="theme-switch-title">화면 테마</span>
+      <div class="theme-switch-btns">
+        <button type="button" class="theme-btn active" id="themeLight" aria-pressed="true" title="라이트(밝은) 테마">
+          <span class="tico" aria-hidden="true">☀️</span><span class="tlbl">라이트</span>
+        </button>
+        <button type="button" class="theme-btn" id="themeDark" aria-pressed="false" title="다크(어두운) 테마">
+          <span class="tico" aria-hidden="true">🌙</span><span class="tlbl">다크</span>
+        </button>
+      </div>
+    </div>
   </nav>
 
 <div class="wrap">
@@ -4523,6 +4603,27 @@ window.__infoTooltip = InfoTooltip;
   $("railCompare").addEventListener("click", () => switchMode("compare"));
   $("railDeid").addEventListener("click", () => switchMode("deid"));
   $("railClean").addEventListener("click", () => switchMode("clean"));
+
+  /* ---------- 화면 테마(라이트 ☀️ / 다크 🌙) 토글 ---------- */
+  (function initTheme() {
+    const root = document.documentElement;
+    const KEY = "dataTool.theme";
+    let saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    const apply = (t) => {
+      const theme = t === "dark" ? "dark" : "light";
+      root.setAttribute("data-theme", theme);
+      const isDark = theme === "dark";
+      const bl = $("themeLight"), bd = $("themeDark");
+      if (bl) { bl.classList.toggle("active", !isDark); bl.setAttribute("aria-pressed", String(!isDark)); }
+      if (bd) { bd.classList.toggle("active", isDark); bd.setAttribute("aria-pressed", String(isDark)); }
+      try { localStorage.setItem(KEY, theme); } catch (e) {}
+    };
+    apply(saved === "dark" ? "dark" : "light");
+    const bl = $("themeLight"), bd = $("themeDark");
+    if (bl) bl.addEventListener("click", () => apply("light"));
+    if (bd) bd.addEventListener("click", () => apply("dark"));
+  })();
 
   /* ---------- 파일 슬롯(A/B) 업로드 ---------- */
   function setCmpError(msg) {
