@@ -675,7 +675,7 @@
       <div class="clean-optgroup muted">선택 옵션</div>
       <div class="grid-opts clean-opts">
         <label><input type="checkbox" id="cl_newline"> 줄바꿈 제거(공백 치환)</label>
-        <label><input type="checkbox" id="cl_control"> 제어문자 제거</label>
+        <label><input type="checkbox" id="cl_fixtype"> 숫자/문자 형식 변환</label>
         <label><input type="checkbox" id="cl_invisible"> 보이지 않는 문자 제거</label>
         <label><input type="checkbox" id="cl_colspace"> 컬럼명 공백 정리</label>
         <label><input type="checkbox" id="cl_colspecial"> 컬럼명 특수문자 정리</label>
@@ -1579,13 +1579,18 @@ const DeidEngine = (function () {
         const m = s.match(/^(\d{6})[-\s]?(\d)/); return m ? m[1] + "-" + m[2] + "******" : s.slice(0, 6) + "-*******";
       }
       case "phone": case "tel": {
-        const p = s.split(/[-\s]/); if (p.length === 3) return p[0] + "-****-" + p[2];
-        return digits.length >= 4 ? "***-****-" + digits.slice(-4) : maskGeneric(s);
+        // 일관 기준: 구분자 유무와 무관하게 '지역/통신사 번호 유지 + 가운데 마스킹 + 뒤 4자리 유지'
+        if (digits.length >= 9) {
+          const head = digits.slice(0, 2) === "02" ? "02" : digits.slice(0, 3);
+          return head + "-****-" + digits.slice(-4);
+        }
+        return maskGeneric(s);
       }
       case "email": {
+        // 일관 기준: 아이디 첫 글자 유지 + 나머지 마스킹(1글자 아이디도 최소 1개 * 부여)
         const at = s.indexOf("@"); if (at <= 0) return maskGeneric(s);
         const id = s.slice(0, at), dom = s.slice(at);
-        return (id.length <= 1 ? id : id[0] + "*".repeat(Math.max(1, id.length - 1))) + dom;
+        return id[0] + "*".repeat(Math.max(1, id.length - 1)) + dom;
       }
       case "card": return digits.length >= 4 ? "****-****-****-" + digits.slice(-4) : maskGeneric(s);
       case "account": return digits.length >= 4 ? digits.slice(0, 3) + "*".repeat(Math.max(1, digits.length - 6)) + digits.slice(-3) : maskGeneric(s);
@@ -1606,7 +1611,14 @@ const DeidEngine = (function () {
     if (type === "address") {
       const m = s.match(/^\s*([가-힣]+(?:특별시|광역시|특별자치시|특별자치도|도|시))\s*([가-힣]+(?:시|군|구))?/);
       if (m) return (m[1] + (m[2] ? " " + m[2] : "")).trim();
-      const toks = s.split(/\s+/); return toks.slice(0, 2).join(" ");
+      // 폴백도 동일 기준(행정구역 2단계까지): 숫자·도로명(로/길)·번지가 나오면 그 앞에서 중단해 상세주소 유출 방지
+      const toks = s.trim().split(/\s+/), keep = [];
+      for (const tk of toks) {
+        if (keep.length >= 2) break;
+        if (/\d/.test(tk) || /(로|길|번지)$/.test(tk)) break;
+        keep.push(tk);
+      }
+      return keep.length ? keep.join(" ") : "주소 비공개";
     }
     return maskValue(type, s);
   }
@@ -1669,6 +1681,7 @@ const DataCleaner = (function () {
     specialMode: "keep",            // keep | common | all
     cleanColSpace: false, cleanColSpecial: false,
     removeEmoji: false, emptyToNull: false, nullToEmpty: false, dashToZero: false,
+    fixTypes: false,   // 숫자 형식 텍스트 → 숫자, 그 외 → 문자 그대로(형식 자동 변환)
   };
   // 제어문자(탭/개행 제외: 각자 옵션에서 처리)
   const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
@@ -1725,6 +1738,15 @@ const DataCleaner = (function () {
     if (o.dashToZero && isNumericCol && isDashMarker(s)) { ctx.dashToZero++; ctx.cellsChanged++; return 0; }
     const cleaned = cleanString(s, o, ctx);
     if (o.emptyToNull && cleaned === "") { if (s !== "") ctx.cellsChanged++; return null; }
+    // 숫자/문자 형식 변환: 숫자 형식 텍스트는 실제 숫자로, 그 외는 문자 그대로.
+    // 코드값 보호: 선행 0(예: "0012")·선행 +(전화 국가번호)·16자리 이상(정밀도 손실)은 변환하지 않는다.
+    if (o.fixTypes && cleaned !== "") {
+      const t = cleaned.trim();
+      if (!/^[+]/.test(t) && !/^[-]?0\d/.test(t) && t.replace(/\D/g, "").length <= 15) {
+        const n = Values.toNumber(t);
+        if (n !== null) { ctx.cellsChanged++; return n; }
+      }
+    }
     if (cleaned !== s) ctx.cellsChanged++;
     return cleaned;
   }
@@ -4275,7 +4297,12 @@ const TOOLTIP_INFO = {
   cl_collapse: { title: "연속 공백 정리", meaning: "값 중간의 여러 칸 공백을 한 칸으로 줄입니다(예: '가  나' → '가 나')." },
   cl_tab: { title: "Tab 문자 제거", meaning: "값에 섞인 탭 문자를 공백으로 바꿉니다.", caution: "탭이 열 구분에 쓰인 것이 아니라 값 안에 들어간 경우를 정리합니다." },
   cl_newline: { title: "줄바꿈 제거(공백 치환)", meaning: "셀 값 안의 줄바꿈(Enter)을 공백 한 칸으로 바꿉니다.", caution: "한 셀에 여러 줄로 입력된 값이 한 줄로 합쳐집니다." },
-  cl_control: { title: "제어문자 제거", meaning: "화면에 보이지 않는 제어문자(널 문자 등)를 제거합니다." },
+  cl_fixtype: {
+    title: "숫자/문자 형식 변환",
+    meaning: "숫자 형식의 텍스트(예: \"1,000\", \"42\")는 실제 숫자로, 그 외 값은 문자 그대로 한 번에 정리합니다.",
+    purpose: "엑셀에서 '텍스트로 저장된 숫자' 경고가 뜨거나 합계가 계산되지 않는 문제를 해결합니다.",
+    caution: "코드값 보호: 선행 0(예: 0012), + 로 시작하는 값, 16자리 이상 숫자는 변환하지 않습니다.",
+  },
   cl_invisible: { title: "보이지 않는 문자 제거", meaning: "폭이 0인 공백·BOM·방향 제어 문자 등 눈에 안 보이는 유니코드를 제거합니다.", practical: "웹에서 복사한 값에 자주 섞여 들어갑니다." },
   cl_colspace: { title: "컬럼명 공백 정리", meaning: "머리글(컬럼명)의 앞뒤·중복 공백을 정리합니다." },
   cl_colspecial: { title: "컬럼명 특수문자 정리", meaning: "머리글의 ! @ # 등 특수문자를 제거합니다(값은 건드리지 않음).", caution: "공공데이터 컬럼명 규칙을 맞출 때 사용합니다." },
@@ -5305,7 +5332,7 @@ window.__infoTooltip = InfoTooltip;
     return {
       trimSpace: $("cl_trim").checked, collapseSpace: $("cl_collapse").checked,
       removeNewline: $("cl_newline").checked, removeTab: $("cl_tab").checked,
-      removeControl: $("cl_control").checked,
+      fixTypes: $("cl_fixtype").checked,
       removeInvisible: $("cl_invisible").checked,
       cleanColSpace: $("cl_colspace").checked, cleanColSpecial: $("cl_colspecial").checked,
       specialMode: $("cl_allspecial").checked ? "all" : "keep",
@@ -5315,7 +5342,7 @@ window.__infoTooltip = InfoTooltip;
   }
   function anyClean(o) {
     return o.specialMode !== "keep" || o.trimSpace || o.collapseSpace || o.removeNewline || o.removeTab ||
-      o.removeControl || o.removeInvisible || o.cleanColSpace || o.cleanColSpecial ||
+      o.fixTypes || o.removeControl || o.removeInvisible || o.cleanColSpace || o.cleanColSpecial ||
       o.emptyToNull || o.nullToEmpty || o.dashToZero;
   }
   const CTX_KEYS = ["specialRemoved", "controlRemoved", "columnsCleaned", "cellsChanged", "dashToZero"];
@@ -5487,7 +5514,7 @@ window.__infoTooltip = InfoTooltip;
     const on = [];
     if (o.trimSpace) on.push("앞뒤 공백"); if (o.collapseSpace) on.push("연속 공백");
     if (o.removeTab) on.push("Tab"); if (o.removeNewline) on.push("줄바꿈");
-    if (o.removeControl) on.push("제어문자"); if (o.removeInvisible) on.push("숨은 문자");
+    if (o.fixTypes) on.push("숫자/문자 형식"); if (o.removeInvisible) on.push("숨은 문자");
     if (o.specialMode === "all") on.push("모든 특수문자 제거");
     if (o.cleanColSpace || o.cleanColSpecial) on.push("컬럼명 정리");
     if (o.dashToZero) on.push('"-"→0');
