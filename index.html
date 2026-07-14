@@ -307,6 +307,7 @@
   .theme-btn:hover{ background:rgba(120,130,150,.14); color:var(--text); }
   .theme-btn.active{ background:var(--panel); color:var(--accent); box-shadow:0 1px 3px rgba(0,0,0,.16); }
   .theme-btn .tico{ font-size:15px; line-height:1; }
+  .rail-version{ margin-top:8px; text-align:center; font-size:11px; letter-spacing:.3px; }
 
   /* ===== 🌙 다크 테마(Midnight Dark) ===== */
   :root[data-theme="dark"]{
@@ -399,6 +400,7 @@
           <span class="tico" aria-hidden="true">🌙</span><span class="tlbl">다크</span>
         </button>
       </div>
+      <div class="rail-version muted">V1.0</div>
     </div>
   </nav>
 
@@ -804,11 +806,8 @@
 
   </div><!-- /viewClean -->
 
-  <p class="muted" style="text-align:center;">
-    ※ 모든 처리는 브라우저 내부에서 수행되며 외부로 데이터가 전송되지 않습니다.
-  </p>
   <footer id="appFooter" class="muted" style="text-align:center; margin-top:16px; font-size:12px;">
-    데이터 이상 탐지 도구 · <span id="appVersion"></span>
+    데이터 이상 탐지 도구
   </footer>
 </div><!-- /wrap -->
 </div><!-- /shell -->
@@ -3325,7 +3324,7 @@ window.__download = Downloader;
 (function () {
   const $ = (id) => document.getElementById(id);
   const FLAG_COL = "이상치 여부", REASON_COL = "이상치 사유";
-  const APP_VERSION = "v0.9", BUILD_DATE = "2026-07-09";
+  const APP_VERSION = "V1.0", BUILD_DATE = "2026-07-14";
   let table = null, numericConfigs = [], lastResult = null;
 
   // 푸터 버전 표기(UX-5) + #debug 해시로 디버그 로그 활성화(OPS-2)
