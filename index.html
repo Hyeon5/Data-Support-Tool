@@ -21,6 +21,7 @@
   header{
     background:var(--header-grad); color:#fff;
     padding:18px 24px;
+    position:sticky; top:0; z-index:30;
   }
   header h1{margin:0; font-size:20px;}
   header p{margin:4px 0 0; font-size:12px; opacity:.85;}
@@ -69,6 +70,7 @@
   th{background:#eef2f7; position:sticky; top:0;}
   .tbl-scroll{max-height:320px; overflow:auto; border:1px solid var(--line); border-radius:8px;}
   .num-config input{width:110px;}
+  #numTable th{ text-align:center; vertical-align:middle; }
   /* 비식별 표: 적용/처리방식을 왼쪽으로, 샘플 값 열은 좁게(말줄임) */
   .deid-config .deid-c-apply{ width:52px; }
   .deid-config .deid-c-method{ width:110px; }
@@ -78,10 +80,12 @@
   .conv-modes{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
   @media (max-width:820px){ .conv-modes{ grid-template-columns:repeat(2,1fr); } }
   .conv-mode{ display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:8px;
-    padding:12px 14px; cursor:pointer; background:#fff; font-size:13px; }
+    padding:12px 14px; cursor:pointer; background:#fff; font-size:13px;
+    align-items:center; justify-content:center; text-align:center; }
   .conv-mode:hover{ background:#f4f7fb; }
   .conv-mode input{ margin-right:4px; }
   .conv-mode span.muted{ font-size:11.5px; }
+  .conv-mode .cm-ico{ font-size:15px; line-height:1; }
   .clean-optgroup{ font-size:12px; font-weight:700; margin:12px 0 6px; }
   .clean-files{ margin-top:10px; display:flex; flex-direction:column; gap:4px; }
   .clean-files-bar{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:2px; }
@@ -183,7 +187,7 @@
   /* ===== C-2: 좌측 레일(항상 펼침 180px) ===== */
   .shell{ display:flex; align-items:flex-start; }
   .rail{ flex:0 0 180px; width:180px; overflow:hidden; background:#eef2f8;
-    border-right:1px solid var(--line); position:sticky; top:0; height:calc(100vh - 88px); z-index:5;
+    border-right:1px solid var(--line); position:sticky; top:88px; height:calc(100vh - 88px); z-index:5;
     display:flex; flex-direction:column; }
   .rail-btn{ width:180px; display:flex; align-items:center; gap:12px; background:transparent;
     color:#42505f; font-weight:600; padding:14px 16px; border-radius:0; white-space:nowrap;
@@ -722,10 +726,10 @@
       <p class="muted">공공데이터포털 등록을 고려한 데이터 정제 후 저장/변환 기능입니다. 여러 파일을 한 번에 처리하실 수 있습니다.
         XLSX→XLSX·CSV→CSV 는 형식을 바꾸지 않고 <b>정제 후 원본 형식으로 저장</b>합니다.</p>
       <div class="conv-modes" role="radiogroup" aria-label="변환 방식 선택">
-        <label class="conv-mode"><input type="radio" name="convMode" value="xlsx2xlsx" checked> <b>XLSX → XLSX</b><span class="muted">정제 후 원본 서식 유지</span></label>
-        <label class="conv-mode"><input type="radio" name="convMode" value="xlsx2csv"> <b>XLSX → CSV</b><span class="muted">시트별 CSV로 변환</span></label>
-        <label class="conv-mode"><input type="radio" name="convMode" value="csv2csv"> <b>CSV → CSV</b><span class="muted">정제 후 CSV로 저장</span></label>
-        <label class="conv-mode"><input type="radio" name="convMode" value="csv2xlsx"> <b>CSV → XLSX</b><span class="muted">CSV를 엑셀로 변환</span></label>
+        <label class="conv-mode"><span class="cm-ico" aria-hidden="true">📊 → 📊</span><input type="radio" name="convMode" value="xlsx2xlsx" checked> <b>XLSX → XLSX</b><span class="muted">정제 후 원본 서식 유지</span></label>
+        <label class="conv-mode"><span class="cm-ico" aria-hidden="true">📊 → 📄</span><input type="radio" name="convMode" value="xlsx2csv"> <b>XLSX → CSV</b><span class="muted">시트별 CSV로 변환</span></label>
+        <label class="conv-mode"><span class="cm-ico" aria-hidden="true">📄 → 📄</span><input type="radio" name="convMode" value="csv2csv"> <b>CSV → CSV</b><span class="muted">정제 후 CSV로 저장</span></label>
+        <label class="conv-mode"><span class="cm-ico" aria-hidden="true">📄 → 📊</span><input type="radio" name="convMode" value="csv2xlsx"> <b>CSV → XLSX</b><span class="muted">CSV를 엑셀로 변환</span></label>
       </div>
     </div>
 
