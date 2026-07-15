@@ -2381,20 +2381,25 @@ function detectTables(grid) {
   for (let r = 0; r < N; r++) { const cols = []; const row = grid[r] || []; for (let c = 0; c < width; c++) if (!isBlank(row[c])) cols.push(c); rowFilled.push(cols); }
   const counts = rowFilled.map((s) => s.length);
 
+  let globalMax = 0; for (const c of counts) if (c > globalMax) globalMax = c;
+
   let start = 0, guard = 0;
   while (start < N && guard++ < N + 5) {
-    // 표별 폭이 달라도 인식되도록, 남은 구간 [start,N) 기준으로 최대 채움을 계산한다.
-    // (start=0 이면 전체 grid 기준 → 단일 표는 gridToTable 과 동일)
-    let maxCount = 0; for (let r = start; r < N; r++) if (counts[r] > maxCount) maxCount = counts[r];
-    if (maxCount === 0) break;
-    // 1) [start, ...) 구간에서 헤더행 선택(gridToTable 와 동일 점수 기준: 텍스트 비율·폭·상단 우선)
+    // 0) 블록(빈 행으로 구분되는 연속 구간) 단위로 탐지한다.
+    //    폭 기준(maxCount)을 블록 안에서 계산 → 뒤쪽의 더 넓은 표가 앞 표를 가리지 않는다.
+    let bs = start; while (bs < N && counts[bs] === 0) bs++;
+    if (bs >= N) break;
+    let be = bs; while (be < N && counts[be] > 0) be++;
+    let maxCount = 0; for (let r = bs; r < be; r++) if (counts[r] > maxCount) maxCount = counts[r];
+
+    // 1) 블록 안에서 헤더행 선택(gridToTable 와 동일 점수 기준: 텍스트 비율·폭·상단 우선)
     let headerRow = -1, best = -1;
-    const scanLimit = Math.min(N, start + 50);
-    for (let r = start; r < scanLimit; r++) {
+    const scanLimit = Math.min(be, bs + 50);
+    for (let r = bs; r < scanLimit; r++) {
       const filled = rowFilled[r];
       if (filled.length < Math.max(2, Math.ceil(maxCount * 0.5))) continue;
       let hasDataBelow = false;
-      for (let k = r + 1; k < N; k++) { if (counts[k] >= Math.max(1, Math.floor(filled.length * 0.5))) { hasDataBelow = true; break; } }
+      for (let k = r + 1; k < be; k++) { if (counts[k] >= Math.max(1, Math.floor(filled.length * 0.5))) { hasDataBelow = true; break; } }
       if (!hasDataBelow) continue;
       const textCount = filled.filter((c) => isTextVal(grid[r][c])).length;
       const textRatio = textCount / filled.length;
@@ -2403,26 +2408,27 @@ function detectTables(grid) {
       if (score > best) { best = score; headerRow = r; }
     }
     if (headerRow < 0) {
-      // 첫 표에 한해 텍스트 헤더가 없으면 숫자 헤더/첫 채운 행을 헤더로(gridToTable 폴백과 동일)
-      if (out.length === 0) {
-        for (let r = start; r < N; r++) if (counts[r] >= Math.max(2, maxCount * 0.5)) { headerRow = r; break; }
-        if (headerRow < 0) for (let r = start; r < N; r++) if (counts[r] > 0) { headerRow = r; break; }
-      }
-      if (headerRow < 0) break;
+      // 이 블록엔 표 헤더가 없다(제목/주석 블록) → 다음 블록으로.
+      // 마지막까지 표를 하나도 못 찾았으면 gridToTable 폴백(숫자 헤더 등)과 동일한 단일 표를 반환.
+      if (be >= N && out.length === 0) { const g = gridToTable(grid); if (g.columns.length) out.push(g); break; }
+      start = be; continue;
     }
 
-    // 2) 열 범위 = 헤더행이 차지한 열의 min..max (표 옆 텍스트 배제)
+    // 2) 예비 열 범위 = 헤더행이 차지한 열의 min..max (표 옆 텍스트 배제)
     let left = Infinity, right = -1;
     for (const c of rowFilled[headerRow]) { if (c < left) left = c; if (c > right) right = c; }
     if (right < 0) { left = 0; right = width - 1; }
 
-    // 3) 2행(일부 병합) 헤더 감지 (gridToTable 과 동일)
+    // 3) 2행(일부 병합) 헤더 감지 — 소분류 행의 채움 열까지 합쳐 판정하고,
+    //    확정되면 열 범위를 확장(병합 대분류의 빈 열이 오른쪽 끝이어도 소실되지 않게).
     let subRow = -1;
     if (headerRow + 1 < N) {
+      let l2 = left, r2 = right;
+      for (const c of rowFilled[headerRow + 1]) { if (c < l2) l2 = c; if (c > r2) r2 = c; }
       let gapFills = 0, subText = 0, subNonText = 0;
-      for (let c = left; c <= right; c++) { const topBlank = isBlank(grid[headerRow][c]); const bv = (grid[headerRow + 1] || [])[c];
+      for (let c = l2; c <= r2; c++) { const topBlank = isBlank(grid[headerRow][c]); const bv = (grid[headerRow + 1] || [])[c];
         if (!isBlank(bv)) { if (isTextVal(bv)) subText++; else subNonText++; if (topBlank && isTextVal(bv)) gapFills++; } }
-      if (gapFills >= 1 && subText > 0 && subNonText === 0) subRow = headerRow + 1;
+      if (gapFills >= 1 && subText > 0 && subNonText === 0) { subRow = headerRow + 1; left = l2; right = r2; }
     }
     const dataStart = (subRow >= 0 ? subRow : headerRow) + 1;
 
@@ -2434,7 +2440,7 @@ function detectTables(grid) {
     const headerFill = rowFilled[headerRow].length;
     const textLimit = Math.max(2, headerFill * 0.4);
     const isNumLike = (v) => typeof v === "number" || v instanceof Date || Values.toNumber(v) !== null || Values.toDate(v) !== null;
-    // 행 1개를 판정: 0=빈 행, 1=데이터, 2=주석 후보(전부 텍스트·성김)
+    // 행 1개를 판정: 0=빈 행, 1=데이터(숫자/날짜 포함), 2=주석 후보(전부 텍스트·성김), 3=전부 텍스트·밀집(텍스트형 데이터/헤더)
     const rowKind = (d) => {
       const row = grid[d] || []; let cnt = 0, hasNum = false;
       for (let c = left; c <= right; c++) {
@@ -2442,17 +2448,18 @@ function detectTables(grid) {
         cnt++; if (!hasNum && isNumLike(v)) hasNum = true;
       }
       if (cnt === 0) return 0;
-      if (hasNum || cnt > textLimit) return 1;
-      return 2;
+      if (hasNum) return 1;
+      return cnt > textLimit ? 3 : 2;
     };
     let dataEnd = dataStart;
     for (let d = dataStart; d < N; d++) {
       const kind = rowKind(d);
-      if (kind === 0) break;                          // 빈 행 = 표 종료
-      if (kind === 1) { dataEnd = d + 1; continue; }  // 데이터 행
-      // 주석 후보: 아래 2행 내 데이터 행이 있으면 중간 메모로 포함, 없으면 표 밖 텍스트 → 종료
+      if (kind === 0) break;                                  // 빈 행 = 표 종료
+      if (kind === 1 || kind === 3) { dataEnd = d + 1; continue; }   // 데이터 행(수치형/텍스트형)
+      // 주석 후보: 아래 2행 내 '숫자 포함 데이터 행'이 다시 나오면 표 중간 메모로 포함.
+      // (전부 텍스트 밀집 행은 다음 표의 헤더일 수 있으므로 브리지 대상에서 제외 → 표 병합 방지)
       let bridge = false;
-      for (let k = d + 1; k <= Math.min(N - 1, d + 2); k++) { const kk = rowKind(k); if (kk === 1) { bridge = true; break; } if (kk === 0) break; }
+      for (let k = d + 1; k <= Math.min(N - 1, d + 2); k++) { const kk = rowKind(k); if (kk === 1) { bridge = true; break; } if (kk === 0 || kk === 3) break; }
       if (!bridge) break;
       dataEnd = d + 1;
     }
