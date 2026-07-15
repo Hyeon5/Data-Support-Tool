@@ -2056,13 +2056,16 @@ const Inflate = (function () {
     }
   }
   function inflateUncompressed(d) {
-    while (d.bitcount > 8) { d.i--; d.bitcount -= 8; }
+    // 스토어(무압축) 블록은 바이트 경계에서 시작한다. 누적기(d.t)에 미리 읽어둔
+    // '완전한 바이트'만 스트림 인덱스로 되돌리고(부분 비트는 패딩이므로 폐기), 정렬을 맞춘다.
+    // (기존 while(bitcount>8) 되감기는 bitcount 가 8의 배수일 때 1바이트 어긋나 length mismatch 를 일으켰다)
+    d.i -= (d.bitcount >>> 3);
+    d.bitcount = 0; d.t = 0;
     let length = d.s[d.i + 1]; length = 256 * length + d.s[d.i];
     let inv = d.s[d.i + 3]; inv = 256 * inv + d.s[d.i + 2];
     if (length !== (~inv & 0xffff)) throw new Error("Inflate: length mismatch");
     d.i += 4;
     for (let i = length; i; --i) d.dest[d.destLen++] = d.s[d.i++];
-    d.bitcount = 0;
   }
   buildFixedTrees(sltree, sdtree);
   buildBitsBase(length_bits, length_base, 4, 3);
