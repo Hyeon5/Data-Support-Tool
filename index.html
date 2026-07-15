@@ -2349,6 +2349,102 @@ function gridToTable(grid) {
   return { columns, rows, meta: { headerRowNum: headerRow + 1, leftCol: left, rightCol: right, rowNumbers } };
 }
 
+/* ---- 한 시트에서 표를 1개 이상 인식(다중 표 + 표 밖 텍스트 배제) ----
+ *  gridToTable 과 동일한 헤더 점수 기준으로 표 영역을 반복 탐지한다.
+ *   - 열 범위는 '헤더행이 차지한 열'로 한정 → 표 옆(오른쪽) 텍스트는 자동 제외.
+ *   - 데이터는 헤더 아래에서 [left,right] 를 2칸 이상 채우는 연속 행까지만 → 표 아래 주석/빈 행 제외.
+ *   - 표가 끝나면(주석/빈 행/새 제목) 다음 헤더를 찾아 다음 표로. 표별 meta.headerRowNum 등 좌표 유지.
+ *  반환: [{columns, rows, meta}] (표가 없으면 []). 단일 표면 gridToTable 과 동일한 결과가 되도록 설계. */
+function detectTables(grid) {
+  const out = [];
+  if (!grid || !grid.length) return out;
+  let width = 0;
+  for (const r of grid) if (r && r.length > width) width = r.length;
+  if (width === 0) return out;
+  const N = grid.length;
+  const isBlank = (v) => Values.isMissing(v);
+  const isTextVal = (v) => !isBlank(v) && Values.toNumber(v) === null && !(v instanceof Date);
+  const rowFilled = [];
+  for (let r = 0; r < N; r++) { const cols = []; const row = grid[r] || []; for (let c = 0; c < width; c++) if (!isBlank(row[c])) cols.push(c); rowFilled.push(cols); }
+  const counts = rowFilled.map((s) => s.length);
+
+  let start = 0, guard = 0;
+  while (start < N && guard++ < N + 5) {
+    // 표별 폭이 달라도 인식되도록, 남은 구간 [start,N) 기준으로 최대 채움을 계산한다.
+    // (start=0 이면 전체 grid 기준 → 단일 표는 gridToTable 과 동일)
+    let maxCount = 0; for (let r = start; r < N; r++) if (counts[r] > maxCount) maxCount = counts[r];
+    if (maxCount === 0) break;
+    // 1) [start, ...) 구간에서 헤더행 선택(gridToTable 와 동일 점수 기준: 텍스트 비율·폭·상단 우선)
+    let headerRow = -1, best = -1;
+    const scanLimit = Math.min(N, start + 50);
+    for (let r = start; r < scanLimit; r++) {
+      const filled = rowFilled[r];
+      if (filled.length < Math.max(2, Math.ceil(maxCount * 0.5))) continue;
+      let hasDataBelow = false;
+      for (let k = r + 1; k < N; k++) { if (counts[k] >= Math.max(1, Math.floor(filled.length * 0.5))) { hasDataBelow = true; break; } }
+      if (!hasDataBelow) continue;
+      const textCount = filled.filter((c) => isTextVal(grid[r][c])).length;
+      const textRatio = textCount / filled.length;
+      if (textRatio < 0.5) continue;
+      const score = textRatio * 3 + filled.length / maxCount - r * 0.01;
+      if (score > best) { best = score; headerRow = r; }
+    }
+    if (headerRow < 0) {
+      // 첫 표에 한해 텍스트 헤더가 없으면 숫자 헤더/첫 채운 행을 헤더로(gridToTable 폴백과 동일)
+      if (out.length === 0) {
+        for (let r = start; r < N; r++) if (counts[r] >= Math.max(2, maxCount * 0.5)) { headerRow = r; break; }
+        if (headerRow < 0) for (let r = start; r < N; r++) if (counts[r] > 0) { headerRow = r; break; }
+      }
+      if (headerRow < 0) break;
+    }
+
+    // 2) 열 범위 = 헤더행이 차지한 열의 min..max (표 옆 텍스트 배제)
+    let left = Infinity, right = -1;
+    for (const c of rowFilled[headerRow]) { if (c < left) left = c; if (c > right) right = c; }
+    if (right < 0) { left = 0; right = width - 1; }
+
+    // 3) 2행(일부 병합) 헤더 감지 (gridToTable 과 동일)
+    let subRow = -1;
+    if (headerRow + 1 < N) {
+      let gapFills = 0, subText = 0, subNonText = 0;
+      for (let c = left; c <= right; c++) { const topBlank = isBlank(grid[headerRow][c]); const bv = (grid[headerRow + 1] || [])[c];
+        if (!isBlank(bv)) { if (isTextVal(bv)) subText++; else subNonText++; if (topBlank && isTextVal(bv)) gapFills++; } }
+      if (gapFills >= 1 && subText > 0 && subNonText === 0) subRow = headerRow + 1;
+    }
+    const dataStart = (subRow >= 0 ? subRow : headerRow) + 1;
+
+    // 4) 데이터 끝: [left,right] 를 2칸 이상 채우는 연속 행까지(주석 1칸·빈 행에서 종료)
+    let dataEnd = dataStart;
+    for (let d = dataStart; d < N; d++) {
+      let cnt = 0; const row = grid[d] || [];
+      for (let c = left; c <= right; c++) if (!isBlank(row[c])) { if (++cnt >= 2) break; }
+      if (cnt >= 2) dataEnd = d + 1; else break;
+    }
+    if (dataEnd <= dataStart) { start = headerRow + 1; continue; }   // 데이터 없는 헤더(주석 오탐) → 다음
+
+    // 5) 컬럼(2행 결합)·행 구성
+    const columns = []; let carry = "";
+    for (let c = left; c <= right; c++) {
+      const topV = grid[headerRow][c];
+      if (!isBlank(topV)) carry = Values.cellText(topV);
+      if (subRow >= 0) {
+        const bv = (grid[subRow] || [])[c];
+        if (!isBlank(bv)) columns.push(carry ? carry + "_" + Values.cellText(bv) : Values.cellText(bv));
+        else columns.push(!isBlank(topV) ? Values.cellText(topV) : ("열" + (c - left + 1)));
+      } else columns.push(isBlank(topV) ? ("열" + (c - left + 1)) : Values.cellText(topV));
+    }
+    const rows = [], rowNumbers = [];
+    for (let d = dataStart; d < dataEnd; d++) {
+      const src = grid[d] || []; let any = false; const row = [];
+      for (let c = left; c <= right; c++) { const v = src[c]; row.push(v === undefined ? null : v); if (!isBlank(v)) any = true; }
+      if (any) { rows.push(row); rowNumbers.push(d + 1); }
+    }
+    out.push({ columns, rows, meta: { headerRowNum: headerRow + 1, leftCol: left, rightCol: right, rowNumbers } });
+    start = dataEnd;
+  }
+  return out;
+}
+
 const XlsxReader = (function () {
   const parser = new DOMParser();
   const dec = new TextDecoder("utf-8");
@@ -2848,30 +2944,46 @@ const CsvWriter = (function () {
 
 /** 파일을 열어 시트 목록과 시트별 읽기 함수를 제공한다(다중 시트 지원).
  *  반환: { sheets: [이름...], readSheet(index) => {columns, rows}, multi: boolean } */
-async function loadWorkbook(file, onProgress) {
+async function loadWorkbook(file, onProgress, opts) {
+  const wantTables = !!(opts && opts.tables);   // 분석/비교/비식별: 시트 내 다중 표 인식(표 밖 텍스트 배제)
   const report = (pct, msg) => { if (onProgress) onProgress(pct, msg); };
   const yieldUi = () => new Promise((r) => setTimeout(r, 0));
   const name = file.name.toLowerCase();
   report(5, "파일을 메모리로 읽고 있습니다...");
   const buf = new Uint8Array(await file.arrayBuffer());
+  // 표 인식 모드: 시트별 grid 를 detectTables 로 나눠 '{시트}'(단일) 또는 '{시트}_표N'(다중) 엔트리 구성.
+  const expand = (names, gridOf) => {
+    const entries = [];
+    names.forEach((sname, si) => {
+      const grid = gridOf(si);
+      const tbls = detectTables(grid);
+      const withMeta = (t) => { t.meta = Object.assign({}, t.meta || {}, { sheetIndex: si }); return t; };
+      if (tbls.length >= 2) tbls.forEach((t, ti) => entries.push({ name: sname + "_표" + (ti + 1), table: withMeta(t) }));
+      else entries.push({ name: sname, table: withMeta(tbls[0] || gridToTable(grid)) });
+    });
+    return { sheets: entries.map((e) => e.name), multi: entries.length > 1, readSheet: (i) => entries[i || 0].table };
+  };
   if (name.endsWith(".csv")) {
     report(10, "CSV 내용을 해석하고 있습니다...");
     const grid = await CsvReader.readGrid(buf, (p) => report(10 + Math.round(p * 0.85), "CSV 내용을 해석하고 있습니다... (" + p + "%)"));
     report(100, "파일 읽기가 끝났습니다.");
-    return { sheets: ["(파일 전체)"], multi: false, readSheet: () => gridToTable(grid) };
+    if (!wantTables) return { sheets: ["(파일 전체)"], multi: false, readSheet: () => gridToTable(grid) };
+    return expand(["(파일 전체)"], () => grid);
   }
   if (name.endsWith(".xlsx")) {
     report(20, "압축을 해제하고 있습니다..."); await yieldUi();
     const wb = XlsxReader.open(buf);
     report(100, "파일 읽기가 끝났습니다.");
     // _xlsx: 원본 서식(글꼴/열너비/행높이 등) 보존 다운로드에 사용할 원본 워크북
-    return { sheets: wb.sheets.map((s) => s.name), multi: wb.sheets.length > 1, readSheet: (i) => gridToTable(XlsxReader.grid(wb, i || 0)), _xlsx: wb };
+    if (!wantTables) return { sheets: wb.sheets.map((s) => s.name), multi: wb.sheets.length > 1, readSheet: (i) => gridToTable(XlsxReader.grid(wb, i || 0)), _xlsx: wb };
+    return Object.assign(expand(wb.sheets.map((s) => s.name), (si) => XlsxReader.grid(wb, si)), { _xlsx: wb });
   }
   if (name.endsWith(".xls")) {
     report(20, "엑셀(xls) 내용을 해석하고 있습니다..."); await yieldUi();
     const wb = XlsReader.open(buf);
     report(100, "파일 읽기가 끝났습니다.");
-    return { sheets: wb.sheets.map((s) => s.name), multi: wb.sheets.length > 1, readSheet: (i) => gridToTable(XlsReader.grid(wb, i || 0)) };
+    if (!wantTables) return { sheets: wb.sheets.map((s) => s.name), multi: wb.sheets.length > 1, readSheet: (i) => gridToTable(XlsReader.grid(wb, i || 0)) };
+    return expand(wb.sheets.map((s) => s.name), (si) => XlsReader.grid(wb, si));
   }
   throw new Error("지원하지 않는 파일 형식입니다.");
 }
@@ -2884,7 +2996,7 @@ async function readFile(file, onProgress) {
   return raw;
 }
 // 시트 인식 UI 및 테스트에서 사용
-window.__readers = { loadWorkbook, readFile, gridToTable };
+window.__readers = { loadWorkbook, readFile, gridToTable, detectTables };
 
 /* =====================================================================
  * 7. 결과 Excel 작성기
@@ -3526,7 +3638,7 @@ window.__download = Downloader;
     try {
       await new Promise((r) => setTimeout(r, 0)); // 로딩 표시가 그려질 기회를 준다
       // 업로드/파싱 단계 진행률을 진행 막대에 표시한다.
-      currentWorkbook = await loadWorkbook(file, (pct, msg) => { setProgress(pct); setStatus(msg); });
+      currentWorkbook = await loadWorkbook(file, (pct, msg) => { setProgress(pct); setStatus(msg); }, { tables: true });
       currentFileBase = file.name.replace(/\.[^.]+$/, "");
       // 여러 시트가 있으면 시트 선택 드롭다운을 채워 보여준다(단일 시트는 숨김).
       populateSheetSelect(currentWorkbook);
@@ -3581,7 +3693,7 @@ window.__download = Downloader;
     table = new TableWrapper(columns, raw.rows);
     // 원본 서식 보존 다운로드용: xlsx 인 경우 원본 워크북/시트/좌표 메타를 보관한다.
     sourceXlsx = currentWorkbook._xlsx || null;
-    sourceSheetIndex = index;
+    sourceSheetIndex = (raw.meta && raw.meta.sheetIndex != null) ? raw.meta.sheetIndex : index;   // 표 엔트리→원본 시트 인덱스
     sourceGridMeta = sourceXlsx ? (raw.meta || null) : null;
     const infos = ColumnAnalyzer.analyze(table);
     numericConfigs = ColumnAnalyzer.buildNumericConfigs(table, infos);
@@ -4757,7 +4869,7 @@ window.__infoTooltip = InfoTooltip;
   /** 검증 + 워크북 열기 — 단일 분석과 동일한 공통 검증 규칙(validateUploadFile)을 재사용한다. */
   async function loadForCompare(file) {
     await window.__upload.validateUploadFile(file);
-    return await loadWorkbook(file);
+    return await loadWorkbook(file, null, { tables: true });
   }
 
   /** 슬롯의 시트 드롭다운을 채운다(2개 이상일 때만 노출). */
@@ -5333,7 +5445,7 @@ window.__infoTooltip = InfoTooltip;
     try {
       await window.__upload.validateUploadFile(file);
       await new Promise((r) => setTimeout(r, 0));
-      deidWB = await window.__readers.loadWorkbook(file);
+      deidWB = await window.__readers.loadWorkbook(file, null, { tables: true });
       $("dzDeidText").textContent = file.name;
       $("dzDeidText").classList.add("dz-file");
       $("dzDeidClear").classList.remove("hidden");
