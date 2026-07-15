@@ -2426,12 +2426,35 @@ function detectTables(grid) {
     }
     const dataStart = (subRow >= 0 ? subRow : headerRow) + 1;
 
-    // 4) 데이터 끝: [left,right] 를 2칸 이상 채우는 연속 행까지(주석 1칸·빈 행에서 종료)
+    // 4) 데이터 끝(표 밖 텍스트 배제):
+    //  - 빈 행이면 표 종료.
+    //  - 숫자/날짜가 하나라도 있는 행은 데이터로 인정(성긴 수치 행 보호).
+    //  - 전부 텍스트이면서 채운 칸이 적은 행(≤ max(2, 헤더폭×0.4))은 표 밖 주석으로 보고 종료.
+    //    단, 바로 아래 2행 안에 정상 데이터 행이 다시 나오면 표 중간 메모로 보고 포함(중간 소계 등).
+    const headerFill = rowFilled[headerRow].length;
+    const textLimit = Math.max(2, headerFill * 0.4);
+    const isNumLike = (v) => typeof v === "number" || v instanceof Date || Values.toNumber(v) !== null || Values.toDate(v) !== null;
+    // 행 1개를 판정: 0=빈 행, 1=데이터, 2=주석 후보(전부 텍스트·성김)
+    const rowKind = (d) => {
+      const row = grid[d] || []; let cnt = 0, hasNum = false;
+      for (let c = left; c <= right; c++) {
+        const v = row[c]; if (isBlank(v)) continue;
+        cnt++; if (!hasNum && isNumLike(v)) hasNum = true;
+      }
+      if (cnt === 0) return 0;
+      if (hasNum || cnt > textLimit) return 1;
+      return 2;
+    };
     let dataEnd = dataStart;
     for (let d = dataStart; d < N; d++) {
-      let cnt = 0; const row = grid[d] || [];
-      for (let c = left; c <= right; c++) if (!isBlank(row[c])) { if (++cnt >= 2) break; }
-      if (cnt >= 2) dataEnd = d + 1; else break;
+      const kind = rowKind(d);
+      if (kind === 0) break;                          // 빈 행 = 표 종료
+      if (kind === 1) { dataEnd = d + 1; continue; }  // 데이터 행
+      // 주석 후보: 아래 2행 내 데이터 행이 있으면 중간 메모로 포함, 없으면 표 밖 텍스트 → 종료
+      let bridge = false;
+      for (let k = d + 1; k <= Math.min(N - 1, d + 2); k++) { const kk = rowKind(k); if (kk === 1) { bridge = true; break; } if (kk === 0) break; }
+      if (!bridge) break;
+      dataEnd = d + 1;
     }
     if (dataEnd <= dataStart) { start = headerRow + 1; continue; }   // 데이터 없는 헤더(주석 오탐) → 다음
 
