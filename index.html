@@ -57,6 +57,15 @@
   }
   .grid-opts{display:grid; grid-template-columns:repeat(3,1fr); gap:8px 16px;}
   .grid-opts label{display:flex; align-items:center; gap:6px; cursor:pointer;}
+  /* 체크박스를 포함한 옵션 라벨에만 hover 피드백(선택 가능한 요소임을 시각화).
+     :has() 로 체크박스 보유 라벨만 대상 — 체크박스 없는 라벨엔 적용되지 않는다.
+     움직임 없는 배경색 전환만 사용(접근성), 음수 마진으로 평상시 레이아웃은 동일. */
+  .grid-opts label:has(input[type="checkbox"]){
+    border-radius:6px; padding:2px 6px; margin:-2px -6px;
+    transition:background-color .12s ease;
+  }
+  .grid-opts label:has(input[type="checkbox"]):hover{ background:rgba(37,99,235,.08); }
+  [data-theme="dark"] .grid-opts label:has(input[type="checkbox"]):hover{ background:rgba(56,189,248,.12); }
   .params{display:grid; grid-template-columns:repeat(2,1fr); gap:10px 24px;}
   /* 이상 변동 판정 기준: 위쪽 3열 옵션 그리드와 열을 맞춘다(2개 항목은 앞 2열에 배치). */
   .params2{display:grid; grid-template-columns:repeat(3,1fr); gap:10px 24px;}
@@ -400,7 +409,7 @@
           <span class="tico" aria-hidden="true">🌙</span><span class="tlbl">다크</span>
         </button>
       </div>
-      <div class="rail-version muted">V1.0</div>
+      <div class="rail-version muted">V1.1</div>
     </div>
   </nav>
 
@@ -1814,9 +1823,9 @@ const DataCleaner = (function () {
   // 권장 기본: 앞뒤 공백·연속 공백·Tab 만 ON. 나머지는 선택(기본 OFF).
   const DEFAULTS = {
     trimSpace: true, collapseSpace: true, removeTab: true,
-    removeNewline: false, removeControl: false, removeInvisible: false,
+    removeNewline: false, removeInvisible: false,
     specialMode: "keep",            // keep | common | all
-    removeEmoji: false, emptyToNull: false, nullToEmpty: false,
+    emptyToNull: false, nullToEmpty: false,
     fixTypes: false,   // 숫자 형식 텍스트 → 숫자, 그 외 → 문자 그대로(형식 자동 변환)
     expandExp: false,  // 지수(E) 표기 숫자 복원(예: 1.11E+14 → 111000000000000)
     thousandSep: false, // 천 단위 구분기호(,) 제거(숫자 형태만, 소수점 유지)
@@ -1825,14 +1834,8 @@ const DataCleaner = (function () {
     nullToZero: false,  // NULL → 0
     zeroToNull: false,  // 0 → NULL
   };
-  // 제어문자(탭/개행 제외: 각자 옵션에서 처리)
-  const CONTROL_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
   // 보이지 않는 유니코드(zero-width, BOM, 방향 제어 등)
   const INVIS_RE = /[\u200B\u200C\u200D\u2060\uFEFF\u00AD\u180E\u061C\u202A-\u202E\u2066-\u2069]/g;
-  // 이모지(대표 구간)
-  const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F1E6}-\u{1F1FF}\u{FE0F}\u{2190}-\u{21FF}\u{2300}-\u{23FF}]/gu;
-  // '일반적인 특수문자만 제거' 대상(그 외 문자는 유지)
-  const COMMON_RE = /[!@#$^&*`~|<>{}\[\]]/g;
   // '모든 특수문자 제거': 아래(한글·영문·숫자·공백· .) 외 전부 제거
   const ALLREMOVE_RE = /[^0-9A-Za-z\uAC00-\uD7A3\u3130-\u318F\u1100-\u11FF\s\.]/g;
   // 결측 표기 대시: 일반 하이픈(-) 외 다양한 대시(엔대시/엠대시/전각/마이너스 등)까지 인식
@@ -1876,11 +1879,8 @@ const DataCleaner = (function () {
     let s = String(str);
     if (o.removeNewline) { ctx.controlRemoved += countMatch(s, /[\r\n]/g); s = s.replace(/\r\n?|\n/g, " "); }
     if (o.removeTab) { ctx.controlRemoved += countMatch(s, /\t/g); s = s.replace(/\t/g, " "); }
-    if (o.removeControl) { ctx.controlRemoved += countMatch(s, CONTROL_RE); s = s.replace(CONTROL_RE, ""); }
     if (o.removeInvisible) { ctx.controlRemoved += countMatch(s, INVIS_RE); s = s.replace(INVIS_RE, ""); }
-    if (o.removeEmoji) { ctx.specialRemoved += countMatch(s, EMOJI_RE); s = s.replace(EMOJI_RE, ""); }
-    if (o.specialMode === "common") { ctx.specialRemoved += countMatch(s, COMMON_RE); s = s.replace(COMMON_RE, ""); }
-    else if (o.specialMode === "all") { ctx.specialRemoved += countMatch(s, ALLREMOVE_RE); s = s.replace(ALLREMOVE_RE, ""); }
+    if (o.specialMode === "all") { ctx.specialRemoved += countMatch(s, ALLREMOVE_RE); s = s.replace(ALLREMOVE_RE, ""); }
     if (o.collapseSpace) s = s.replace(/ {2,}/g, " ");
     if (o.trimSpace) s = s.trim();
     return s;
@@ -1892,7 +1892,7 @@ const DataCleaner = (function () {
   }
 
   // 값 1건 정제.
-  function cleanCellValue(value, o, isNumericCol, ctx) {
+  function cleanCellValue(value, o, ctx) {
     if (Values.isMissing(value)) {
       if (o.nullToZero) { ctx.cellsChanged++; return 0; }   // NULL → 0
       if (o.nullToEmpty) return "";                          // NULL → 빈 문자열
@@ -1939,35 +1939,17 @@ const DataCleaner = (function () {
     return cleaned;
   }
 
-  // '-'→0 판정용 숫자 컬럼 집합. '-'(결측 표기)를 제외한 값의 80% 이상이 숫자면 숫자 컬럼으로 본다.
-  // (일반 숫자 판정은 '-' 가 많으면 실패하므로 dashToZero 전용으로 관대하게 판정)
-  function dashNumericCols(columns, rows) {
-    const set = new Set();
-    columns.forEach((c, ci) => {
-      let numeric = 0, other = 0;
-      for (const r of rows) {
-        const v = r[ci];
-        if (Values.isMissing(v)) continue;
-        if (typeof v === "string" && isDashMarker(v)) continue;
-        if (typeof v === "number" || Values.toNumber(v) !== null) numeric++; else other++;
-      }
-      if (numeric > 0 && numeric / (numeric + other) >= 0.8) set.add(c);
-    });
-    return set;
-  }
-
   // {columns, rows} 전체 정제(csv/새 xlsx 출력용). 원본 배열은 변경하지 않는다.
   function cleanTable(columns, rows, opts) {
     const o = Object.assign({}, DEFAULTS, opts || {});
     const ctx = makeContext();
-    const numericSet = o.dashToZero ? dashNumericCols(columns, rows) : new Set();
     const newCols = columns.map((c) => cleanHeader(c, o, ctx));
-    const newRows = rows.map((r) => columns.map((c, ci) => cleanCellValue(r[ci], o, numericSet.has(c), ctx)));
+    const newRows = rows.map((r) => columns.map((c, ci) => cleanCellValue(r[ci], o, ctx)));
     ctx.rowCount = rows.length; ctx.colCount = columns.length;
     return { columns: newCols, rows: newRows, summary: ctx };
   }
 
-  return { DEFAULTS, makeContext, cleanString, cleanHeader, cleanCellValue, cleanTable, dashNumericCols, isDashMarker, expandScientific };
+  return { DEFAULTS, makeContext, cleanString, cleanHeader, cleanCellValue, cleanTable, isDashMarker, expandScientific };
 })();
 
 /* ---- Web Worker 진입점 ---- */
@@ -2151,6 +2133,7 @@ const Zip = (function () {
 
   /** ZIP 바이트를 해석하여 {파일명: Uint8Array} 맵을 반환한다. */
   function read(bytes) {
+    const nameDec = new TextDecoder("utf-8");   // 엔트리마다 새로 만들지 않고 재사용(성능)
     const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let eocd = -1;
     for (let i = bytes.length - 22; i >= 0; i--) {
@@ -2169,7 +2152,7 @@ const Zip = (function () {
       const extraLen = dv.getUint16(p + 30, true);
       const commentLen = dv.getUint16(p + 32, true);
       const localOff = dv.getUint32(p + 42, true);
-      const name = new TextDecoder("utf-8").decode(bytes.subarray(p + 46, p + 46 + nameLen));
+      const name = nameDec.decode(bytes.subarray(p + 46, p + 46 + nameLen));
       const lhNameLen = dv.getUint16(localOff + 26, true);
       const lhExtraLen = dv.getUint16(localOff + 28, true);
       const dataStart = localOff + 30 + lhNameLen + lhExtraLen;
@@ -2590,8 +2573,93 @@ const XlsxReader = (function () {
     };
   }
 
+  // ---- 빠른 grid 파서(문자열 스캔) — 대용량에서 DOM 파싱 대비 수 배 빠르다. 실패 시 DOM 경로 폴백. ----
+  const F_ROW_RE = /<row\b[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g;
+  const F_CELL_RE = /<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g;
+  const F_T = /\bt="([^"]*)"/, F_S = /\bs="([^"]*)"/, F_RCOL = /\br="([A-Z]+)\d*"/;
+  const F_ROWNUM = /^<row\b[^>]*?\br="(\d+)"/;
+  const F_V = /<v[^>]*>([\s\S]*?)<\/v>/;
+  const F_TS = /<t[^>]*>([\s\S]*?)<\/t>/g;
+  function decodeXmlFast(s) {
+    // XML 표준 줄바꿈 정규화(\r\n·\r → \n)를 엔티티 해석 전에 적용 — DOM 파서와 동일 결과
+    if (s.indexOf("\r") !== -1) s = s.replace(/\r\n?/g, "\n");
+    if (s.indexOf("&") === -1) return s;
+    return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(+d))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+      .replace(/&amp;/g, "&");
+  }
+  function gridFast(wb, index) {
+    const sheet = wb.sheets[index || 0];
+    if (!sheet || !wb.files[sheet.path]) throw new Error("xlsx: 선택한 시트를 찾을 수 없습니다.");
+    const xml = dec.decode(wb.files[sheet.path]);
+    const sd = xml.indexOf("<sheetData");
+    if (sd < 0) return [];
+    const sdClose = xml.indexOf("</sheetData>", sd);
+    const body = sdClose < 0 ? xml.slice(sd) : xml.slice(sd, sdClose);
+    const cellMap = {}; let maxCol = -1, maxRow = 0, rowSeq = 0;
+    let rm; F_ROW_RE.lastIndex = 0;
+    while ((rm = F_ROW_RE.exec(body))) {
+      const rowStr = rm[0]; rowSeq++;
+      const rnm = F_ROWNUM.exec(rowStr);
+      const rowNum = rnm ? parseInt(rnm[1], 10) : rowSeq;
+      if (rowNum > maxRow) maxRow = rowNum;
+      const gtr = rowStr.indexOf(">");
+      if (gtr < 0 || rowStr[gtr - 1] === "/") { cellMap[rowNum] = cellMap[rowNum] || {}; continue; }
+      const rowObj = cellMap[rowNum] || (cellMap[rowNum] = {});
+      let cm, cSeq = -1; F_CELL_RE.lastIndex = 0;
+      while ((cm = F_CELL_RE.exec(rowStr))) {
+        const cell = cm[0]; cSeq++;
+        const gt = cell.indexOf(">");
+        const openTag = cell.slice(0, gt + 1);
+        const rr = F_RCOL.exec(openTag);
+        const colIdx = rr ? colLettersToIndex(rr[1]) : cSeq;
+        if (colIdx > maxCol) maxCol = colIdx;
+        const tm = F_T.exec(openTag); const t = tm ? tm[1] : null;
+        // 빈 셀: DOM 경로와 동일하게 inlineStr 은 ""(빈 문자열), 그 외는 null
+        if (cell[gt - 1] === "/") { rowObj[colIdx] = (t === "inlineStr") ? "" : null; continue; }
+        const inner = cell.slice(gt + 1, cell.length - 4);
+        let value = null;
+        if (t === "inlineStr") {
+          let str = "", ts; F_TS.lastIndex = 0;
+          while ((ts = F_TS.exec(inner))) str += decodeXmlFast(ts[1]);
+          value = str;
+        } else {
+          const vm = F_V.exec(inner);
+          const raw = vm ? vm[1] : null;
+          if (raw === null || raw === "") value = null;
+          else if (t === "s") value = wb.shared[parseInt(raw, 10)] ?? "";
+          else if (t === "str") value = decodeXmlFast(raw);
+          else if (t === "b") value = (raw === "1");
+          else if (t === "e") value = decodeXmlFast(raw);
+          else {
+            const num = Number(raw);
+            const sm = F_S.exec(openTag);
+            if (sm && wb.isDate[parseInt(sm[1], 10)]) value = excelSerialToDate(num);
+            else value = num;
+          }
+        }
+        rowObj[colIdx] = value;
+      }
+    }
+    const out = [];
+    for (let rn = 1; rn <= maxRow; rn++) {
+      const obj = cellMap[rn];
+      const row = new Array(maxCol + 1).fill(null);
+      if (obj) for (const c in obj) row[c] = obj[c];
+      out.push(row);
+    }
+    return out;
+  }
+
   // 지정 시트를 2차원 grid(행 1..maxRow, 앞쪽 빈 행/열 포함)로 반환한다.
+  // 기본은 빠른 문자열 스캔(gridFast), 예기치 못한 구조는 DOM 파서로 폴백.
   function grid(wb, index) {
+    try { return gridFast(wb, index); }
+    catch (e) { if (String(e && e.message).indexOf("시트를 찾을 수") >= 0) throw e; }
+    return gridDom(wb, index);
+  }
+  function gridDom(wb, index) {
     const sheet = wb.sheets[index || 0];
     if (!sheet || !wb.files[sheet.path]) throw new Error("xlsx: 선택한 시트를 찾을 수 없습니다.");
     const doc = parser.parseFromString(dec.decode(wb.files[sheet.path]), "application/xml");
@@ -2645,7 +2713,7 @@ const XlsxReader = (function () {
 
   // 호환: 첫 시트를 자동 탐지하여 {columns, rows} 반환
   function read(bytes, index) { return gridToTable(grid(open(bytes), index || 0)); }
-  return { open, grid, read };
+  return { open, grid, gridDom, read };   // gridDom: 폴백/검증용
 })();
 
 const XlsReader = (function () {
@@ -3439,7 +3507,7 @@ const XlsxCleaner = (function () {
   }
 
   // 셀 하나를 정제해 새 셀 문자열을 반환한다(변경 없으면 원본 그대로).
-  function cleanCell(cell, rowNum, o, ctx, headerRowNum, numCols) {
+  function cleanCell(cell, rowNum, o, ctx, headerRowNum) {
     const gt = cell.indexOf(">");
     if (cell[gt - 1] === "/") return cell;                 // 빈 셀
     const open = cell.slice(0, gt + 1);
@@ -3477,9 +3545,7 @@ const XlsxCleaner = (function () {
       if (nv === str) return cell;
       newInner = '<is><t xml:space="preserve">' + escXml(nv) + "</t></is>"; newT = "inlineStr";
     } else {
-      let colIdx = -1;
-      if (o.dashToZero) { const rr = R_ATTR.exec(open); if (rr) colIdx = colToIndex(rr[1]); }
-      const cv = DataCleaner.cleanCellValue(str, o, numCols.has(colIdx), ctx);
+      const cv = DataCleaner.cleanCellValue(str, o, ctx);
       if (cv === null) { newInner = ""; newT = null; }
       else if (typeof cv === "number") { newInner = "<v>" + cv + "</v>"; newT = null; }
       else { if (cv === str) return cell; newInner = '<is><t xml:space="preserve">' + escXml(cv) + "</t></is>"; newT = "inlineStr"; }
@@ -3488,14 +3554,14 @@ const XlsxCleaner = (function () {
     const tAttr = newT ? ' t="' + newT + '"' : "";
     return newInner === "" ? "<c" + attrs + tAttr + "/>" : "<c" + attrs + tAttr + ">" + newInner + "</c>";
   }
-  function cleanRow(rowStr, o, ctx, headerRowNum, numCols, hdrSpan) {
+  function cleanRow(rowStr, o, ctx, headerRowNum, hdrSpan) {
     const rm = ROWNUM_ATTR.exec(rowStr);
     const rowNum = rm ? parseInt(rm[1], 10) : 0;
     const gt = rowStr.indexOf(">");
     if (gt < 0 || rowStr[gt - 1] === "/") return rowStr;   // 빈 행
     if (o.nullToZero && hdrSpan && rowNum > headerRowNum)
-      return fillRowNulls(rowStr, gt, rowNum, o, ctx, headerRowNum, numCols, hdrSpan);
-    return rowStr.replace(CELL_RE, (cell) => cleanCell(cell, rowNum, o, ctx, headerRowNum, numCols));
+      return fillRowNulls(rowStr, gt, rowNum, o, ctx, headerRowNum, hdrSpan);
+    return rowStr.replace(CELL_RE, (cell) => cleanCell(cell, rowNum, o, ctx, headerRowNum));
   }
 
   // 0-based 열 인덱스 → 열 문자(A, B, ... AA)
@@ -3504,7 +3570,7 @@ const XlsxCleaner = (function () {
 
   /** NULL→0(서식 보존): 데이터 행(값 2개 이상)의 빈/부재 셀을 헤더 열 범위 안에서 0 으로 채운다.
    *  값이 1개 이하인 행(표 밑 주석 등)과 헤더 위 행은 채우지 않는다. 수식 셀은 보존. */
-  function fillRowNulls(rowStr, gt, rowNum, o, ctx, headerRowNum, numCols, hdrSpan) {
+  function fillRowNulls(rowStr, gt, rowNum, o, ctx, headerRowNum, hdrSpan) {
     const open = rowStr.slice(0, gt + 1);
     const cells = []; let m; CELL_RE.lastIndex = 0; let filled = 0, unaddressed = false;
     while ((m = CELL_RE.exec(rowStr))) {
@@ -3519,7 +3585,7 @@ const XlsxCleaner = (function () {
     }
     // 값 1개 이하(주석성 행)거나 주소 없는 셀이 섞이면 기존 방식 그대로(채움 없이 셀별 정제만)
     if (filled < 2 || unaddressed)
-      return rowStr.replace(CELL_RE, (cell) => cleanCell(cell, rowNum, o, ctx, headerRowNum, numCols));
+      return rowStr.replace(CELL_RE, (cell) => cleanCell(cell, rowNum, o, ctx, headerRowNum));
     const byCol = new Map(cells.map((c) => [c.ci, c]));
     let maxCi = -1; for (const c of cells) if (c.ci > maxCi) maxCi = c.ci;
     const top = Math.max(maxCi, hdrSpan[1]);
@@ -3532,7 +3598,7 @@ const XlsxCleaner = (function () {
           const cgt2 = e.cell.indexOf(">");
           const at = e.cell.slice(2, e.cell[cgt2 - 1] === "/" ? cgt2 - 1 : cgt2).replace(/\s+t="[^"]*"/, "").replace(/\s+$/, "");
           parts.push("<c" + at + "><v>0</v></c>"); ctx.cellsChanged++;
-        } else parts.push(cleanCell(e.cell, rowNum, o, ctx, headerRowNum, numCols));
+        } else parts.push(cleanCell(e.cell, rowNum, o, ctx, headerRowNum));
       } else if (inSpan) {           // 부재 셀 → 0 셀 삽입
         parts.push('<c r="' + colName(ci) + rowNum + '"><v>0</v></c>'); ctx.cellsChanged++;
       }
@@ -3559,23 +3625,6 @@ const XlsxCleaner = (function () {
     for (let r = 0; r < maxRow; r++) if (!partial[r]) partial[r] = [];
     const headerRowNum = (gridToTable(partial).meta.headerRowNum) || 1;
 
-    // 숫자 컬럼 판정('-'→0 옵션일 때만 전체 스캔)
-    let numCols = new Set();
-    if (o.dashToZero) {
-      const cnt = {};
-      for (let i = 0; i < rows.length; i++) {
-        const rv = rowValues(rows[i]); if (rv.rowNum <= headerRowNum) continue;
-        const vals = rv.vals;
-        for (let c = 0; c < vals.length; c++) {
-          const v = vals[c]; if (v == null || v === "") continue;
-          if (typeof v === "string" && DataCleaner.isDashMarker(v)) continue;
-          const isNum = typeof v === "number" || Values.toNumber(v) !== null;
-          const e = cnt[c] || (cnt[c] = { n: 0, o: 0 }); if (isNum) e.n++; else e.o++;
-        }
-      }
-      for (const c in cnt) { const e = cnt[c]; if (e.n > 0 && e.n / (e.n + e.o) >= 0.8) numCols.add(parseInt(c, 10)); }
-    }
-
     // NULL→0 채움용: 헤더 행의 열 범위(빈 셀을 채울 한계 열)
     let hdrSpan = null;
     if (o.nullToZero) {
@@ -3588,7 +3637,7 @@ const XlsxCleaner = (function () {
     // 행 재작성(청크 단위로 UI 양보 + 진행률)
     const out = new Array(rows.length);
     for (let i = 0; i < rows.length; i++) {
-      out[i] = cleanRow(rows[i], o, ctx, headerRowNum, numCols, hdrSpan);
+      out[i] = cleanRow(rows[i], o, ctx, headerRowNum, hdrSpan);
       if (i % YIELD_EVERY === 0) { if (onRow) onRow(i, rows.length); await new Promise((r) => setTimeout(r, 0)); }
     }
     if (onRow) onRow(rows.length, rows.length);
@@ -3654,7 +3703,7 @@ window.__download = Downloader;
 (function () {
   const $ = (id) => document.getElementById(id);
   const FLAG_COL = "이상치 여부", REASON_COL = "이상치 사유";
-  const APP_VERSION = "V1.0", BUILD_DATE = "2026-07-14";
+  const APP_VERSION = "V1.1", BUILD_DATE = "2026-07-16";
   let table = null, numericConfigs = [], lastResult = null;
 
   // 푸터 버전 표기(UX-5) + #debug 해시로 디버그 로그 활성화(OPS-2)
@@ -5867,7 +5916,7 @@ window.__infoTooltip = InfoTooltip;
   }
   function anyClean(o) {
     return o.specialMode !== "keep" || o.trimSpace || o.collapseSpace || o.removeNewline || o.removeTab ||
-      o.fixTypes || o.removeControl || o.removeInvisible || o.expandExp || o.thousandSep ||
+      o.fixTypes || o.removeInvisible || o.expandExp || o.thousandSep ||
       o.dashXToZero || o.dashXToNull || o.nullToZero || o.zeroToNull || o.emptyToNull || o.nullToEmpty;
   }
   const CTX_KEYS = ["specialRemoved", "controlRemoved", "columnsCleaned", "cellsChanged", "dashToZero"];
