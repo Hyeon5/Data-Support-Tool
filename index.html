@@ -460,6 +460,17 @@
     </div>
   </div>
 
+  <!-- 분석 대상 컬럼 -->
+  <div class="panel coll" id="analyzeColsPanel">
+    <h2><span>분석 대상 컬럼</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
+    <p class="muted">체크한 컬럼만 분석합니다. 기본은 전체 선택이며, 해제한 컬럼은 모든 검사(결측·중복·범위·통계·ML)에서 제외됩니다.</p>
+    <div class="row" style="margin-bottom:8px;">
+      <button type="button" id="acSelectAll" class="secondary">전체 선택</button>
+      <button type="button" id="acClearAll" class="secondary">전체 해제</button>
+    </div>
+    <div id="analyzeColsList" class="ma-list"><span class="muted">파일을 먼저 선택해 주세요.</span></div>
+  </div>
+
   <!-- 결측 허용 컬럼 -->
   <div class="panel coll" id="missingAllowPanel">
     <h2><span>결측 허용 컬럼 (결측치 탐지)</span><span class="coll-caret" aria-hidden="true">▼</span></h2>
@@ -1412,6 +1423,22 @@ const Detectors = (function () {
  * 6. 분석 오케스트레이션 (스테이지/청크 진행률 + 구조화된 판정 근거)
  * ===================================================================== */
 async function runAnalysis(table, config, onProgress) {
+  // 분석 대상 컬럼 선택(config.analyzeCols): 선택 컬럼만으로 부분 표를 만들어 검사한다.
+  // 행은 그대로이므로 행별 플래그/사유는 원본과 1:1 정렬 — 결과 표는 원본 전체 컬럼으로 되돌린다.
+  if (config && Array.isArray(config.analyzeCols) && config.analyzeCols.length &&
+      config.analyzeCols.length < table.columns.length) {
+    const idxs = [];
+    for (const c of config.analyzeCols) { const i = table.columns.indexOf(c); if (i >= 0) idxs.push(i); }
+    if (idxs.length && idxs.length < table.columns.length) {
+      const sub = { columns: idxs.map((i) => table.columns[i]), rows: table.rows.map((r) => idxs.map((i) => r[i])) };
+      const subCfg = Object.assign({}, config, {
+        analyzeCols: null,
+        numericConfigs: (config.numericConfigs || []).filter((nc) => sub.columns.indexOf(nc.name) >= 0),
+      });
+      const res = await runAnalysis(sub, subCfg, onProgress);
+      return Object.assign({}, res, { table });
+    }
+  }
   const t0 = Date.now();
   const sleep = () => new Promise(r => setTimeout(r, 0));
   const report = (pct, msg, extra) => onProgress(pct, msg, extra || {});
@@ -3351,8 +3378,11 @@ const XlsxCleaner = (function () {
   const enc = new TextEncoder();
   // 성능: DOM 파싱/직렬화를 쓰지 않고 시트 XML 을 문자열로 스캔·치환한다.
   // (셀 구조가 규칙적이라 정규식 스캔이 DOM 대비 수십 배 빠르고 메모리도 적다)
-  const CELL_RE = /<c\b[^>]*(?:\/>|>[\s\S]*?<\/c>)/g;   // 셀 하나(자체닫힘 또는 내용)
-  const ROW_RE = /<row\b[^>]*(?:\/>|>[\s\S]*?<\/row>)/g;
+  // 셀/행 하나(자체닫힘 또는 내용). 게으른 수량자([^>]*?) 사용:
+  // '<c ... />' 처럼 슬래시 앞에 공백이 있는 자기닫힘 태그에서 탐욕 매칭이 '/'를 삼켜
+  // 다음 셀까지 한 덩어리로 잘못 매칭하는 문제 방지(openpyxl 등 외부 저장 파일).
+  const CELL_RE = /<c\b[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g;
+  const ROW_RE = /<row\b[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g;
   const T_ATTR = /\bt="([^"]+)"/;
   const R_ATTR = /\br="([A-Z]+)\d+"/;
   const ROWNUM_ATTR = /^<row\b[^>]*\br="(\d+)"/;
@@ -3458,12 +3488,56 @@ const XlsxCleaner = (function () {
     const tAttr = newT ? ' t="' + newT + '"' : "";
     return newInner === "" ? "<c" + attrs + tAttr + "/>" : "<c" + attrs + tAttr + ">" + newInner + "</c>";
   }
-  function cleanRow(rowStr, o, ctx, headerRowNum, numCols) {
+  function cleanRow(rowStr, o, ctx, headerRowNum, numCols, hdrSpan) {
     const rm = ROWNUM_ATTR.exec(rowStr);
     const rowNum = rm ? parseInt(rm[1], 10) : 0;
     const gt = rowStr.indexOf(">");
     if (gt < 0 || rowStr[gt - 1] === "/") return rowStr;   // 빈 행
+    if (o.nullToZero && hdrSpan && rowNum > headerRowNum)
+      return fillRowNulls(rowStr, gt, rowNum, o, ctx, headerRowNum, numCols, hdrSpan);
     return rowStr.replace(CELL_RE, (cell) => cleanCell(cell, rowNum, o, ctx, headerRowNum, numCols));
+  }
+
+  // 0-based 열 인덱스 → 열 문자(A, B, ... AA)
+  function colName(idx) { let s = "", n = idx + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = (n - m - 1) / 26; } return s; }
+  const HASVAL_RE = /<v[^>]*>[^<]|<t[^>]*>[^<]/;   // 비어있지 않은 <v> 또는 <t>
+
+  /** NULL→0(서식 보존): 데이터 행(값 2개 이상)의 빈/부재 셀을 헤더 열 범위 안에서 0 으로 채운다.
+   *  값이 1개 이하인 행(표 밑 주석 등)과 헤더 위 행은 채우지 않는다. 수식 셀은 보존. */
+  function fillRowNulls(rowStr, gt, rowNum, o, ctx, headerRowNum, numCols, hdrSpan) {
+    const open = rowStr.slice(0, gt + 1);
+    const cells = []; let m; CELL_RE.lastIndex = 0; let filled = 0, unaddressed = false;
+    while ((m = CELL_RE.exec(rowStr))) {
+      const cell = m[0], cgt = cell.indexOf(">");
+      const rr = R_ATTR.exec(cell.slice(0, cgt + 1));
+      const ci = rr ? colToIndex(rr[1]) : -1;
+      if (ci < 0) unaddressed = true;
+      const inner = cell[cgt - 1] === "/" ? "" : cell.slice(cgt + 1, cell.length - 4);
+      const hasVal = inner.indexOf("<f") !== -1 || HASVAL_RE.test(inner);
+      if (hasVal) filled++;
+      cells.push({ ci, cell, hasVal });
+    }
+    // 값 1개 이하(주석성 행)거나 주소 없는 셀이 섞이면 기존 방식 그대로(채움 없이 셀별 정제만)
+    if (filled < 2 || unaddressed)
+      return rowStr.replace(CELL_RE, (cell) => cleanCell(cell, rowNum, o, ctx, headerRowNum, numCols));
+    const byCol = new Map(cells.map((c) => [c.ci, c]));
+    let maxCi = -1; for (const c of cells) if (c.ci > maxCi) maxCi = c.ci;
+    const top = Math.max(maxCi, hdrSpan[1]);
+    const parts = [];
+    for (let ci = 0; ci <= top; ci++) {
+      const e = byCol.get(ci);
+      const inSpan = ci >= hdrSpan[0] && ci <= hdrSpan[1];
+      if (e) {
+        if (!e.hasVal && inSpan) {   // 존재하는 빈 셀 → 0 (스타일 등 속성 보존, t 제거)
+          const cgt2 = e.cell.indexOf(">");
+          const at = e.cell.slice(2, e.cell[cgt2 - 1] === "/" ? cgt2 - 1 : cgt2).replace(/\s+t="[^"]*"/, "").replace(/\s+$/, "");
+          parts.push("<c" + at + "><v>0</v></c>"); ctx.cellsChanged++;
+        } else parts.push(cleanCell(e.cell, rowNum, o, ctx, headerRowNum, numCols));
+      } else if (inSpan) {           // 부재 셀 → 0 셀 삽입
+        parts.push('<c r="' + colName(ci) + rowNum + '"><v>0</v></c>'); ctx.cellsChanged++;
+      }
+    }
+    return open + parts.join("") + "</row>";
   }
 
   // 시트 XML 문자열 하나를 정제(행 단위 청크 처리 + 진행률 보고).
@@ -3502,10 +3576,19 @@ const XlsxCleaner = (function () {
       for (const c in cnt) { const e = cnt[c]; if (e.n > 0 && e.n / (e.n + e.o) >= 0.8) numCols.add(parseInt(c, 10)); }
     }
 
+    // NULL→0 채움용: 헤더 행의 열 범위(빈 셀을 채울 한계 열)
+    let hdrSpan = null;
+    if (o.nullToZero) {
+      const hv = partial[headerRowNum - 1] || [];
+      let hl = -1, hr = -1;
+      for (let c = 0; c < hv.length; c++) if (hv[c] != null && hv[c] !== "") { if (hl < 0) hl = c; hr = c; }
+      if (hr >= 0) hdrSpan = [hl, hr];
+    }
+
     // 행 재작성(청크 단위로 UI 양보 + 진행률)
     const out = new Array(rows.length);
     for (let i = 0; i < rows.length; i++) {
-      out[i] = cleanRow(rows[i], o, ctx, headerRowNum, numCols);
+      out[i] = cleanRow(rows[i], o, ctx, headerRowNum, numCols, hdrSpan);
       if (i % YIELD_EVERY === 0) { if (onRow) onRow(i, rows.length); await new Promise((r) => setTimeout(r, 0)); }
     }
     if (onRow) onRow(rows.length, rows.length);
@@ -3626,7 +3709,7 @@ window.__download = Downloader;
   function resetUpload() {
     table = null; numericConfigs = []; lastResult = null; currentWorkbook = null;
     sourceXlsx = null; sourceGridMeta = null;
-    renderNumericTable(); renderMissingAllowList();
+    renderNumericTable(); renderMissingAllowList(); renderAnalyzeColsList();
     $("sheetRow").classList.add("hidden");
     $("fileInfo").textContent = "";
     $("fileName").textContent = "선택된 파일이 없습니다.";
@@ -3700,7 +3783,7 @@ window.__download = Downloader;
       setStatus("파일을 읽지 못했습니다. 다른 파일로 다시 시도해 주세요.");
       // 실패 시 상태 초기화(부분 반영 방지) 및 기본 안내 문구 복원
       currentWorkbook = null;
-      table = null; numericConfigs = []; renderNumericTable(); renderMissingAllowList();
+      table = null; numericConfigs = []; renderNumericTable(); renderMissingAllowList(); renderAnalyzeColsList();
       $("sheetRow").classList.add("hidden");
       $("fileInfo").textContent = ""; $("fileName").textContent = "선택된 파일이 없습니다.";
       $("fileName").classList.add("filecue");
@@ -3731,7 +3814,7 @@ window.__download = Downloader;
   function applyLoadedSheet(index) {
     const raw = currentWorkbook.readSheet(index);
     if (!raw.columns.length) {
-      table = null; numericConfigs = []; renderNumericTable(); renderMissingAllowList();
+      table = null; numericConfigs = []; renderNumericTable(); renderMissingAllowList(); renderAnalyzeColsList();
       sourceXlsx = null; sourceGridMeta = null;
       $("fileInfo").textContent = "";
       $("resultPanel").classList.add("hidden"); lastResult = null;
@@ -3748,6 +3831,7 @@ window.__download = Downloader;
     numericConfigs = ColumnAnalyzer.buildNumericConfigs(table, infos);
     renderNumericTable();
     renderMissingAllowList();
+    renderAnalyzeColsList();
     const typeSummary = infos.map((i) => i.name + "(" + i.type + ")").join(", ");
     const sheetName = currentWorkbook.sheets[index];
     $("fileInfo").textContent = (currentWorkbook.multi ? "시트 '" + sheetName + "' · " : "") +
@@ -3852,8 +3936,42 @@ window.__download = Downloader;
       dbscanMinSamples: readNum("p_minsamples", 5, 1, 1000, true),
       numericConfigs: numericConfigs,
       missingAllowCols: collectMissingAllowCols(),
+      analyzeCols: collectAnalyzeCols(),
     };
   }
+
+  // ----- 분석 대상 컬럼 UI -----
+  /** 파일 로드 후 컬럼 목록으로 분석 대상 체크박스를 그린다(기본: 모두 선택). */
+  function renderAnalyzeColsList() {
+    const box = $("analyzeColsList");
+    box.innerHTML = "";
+    if (!table || !table.columns.length) {
+      box.innerHTML = '<span class="muted">파일을 먼저 선택해 주세요.</span>';
+      return;
+    }
+    table.columns.forEach((col) => {
+      const label = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.value = col; cb.className = "ac-col"; cb.checked = true;
+      const span = document.createElement("span");
+      span.textContent = col;
+      label.appendChild(cb); label.appendChild(span);
+      box.appendChild(label);
+    });
+  }
+  /** 선택된 분석 대상 컬럼. 전체 선택이면 null(전체 분석·프로젝션 생략). */
+  function collectAnalyzeCols() {
+    const all = Array.from(document.querySelectorAll("#analyzeColsList input.ac-col"));
+    if (!all.length) return null;
+    const sel = all.filter((el) => el.checked).map((el) => el.value);
+    return sel.length === all.length ? null : sel;
+  }
+  $("acSelectAll").addEventListener("click", () => {
+    document.querySelectorAll("#analyzeColsList input.ac-col").forEach((el) => { el.checked = true; });
+  });
+  $("acClearAll").addEventListener("click", () => {
+    document.querySelectorAll("#analyzeColsList input.ac-col").forEach((el) => { el.checked = false; });
+  });
 
   // ----- 결측 허용 컬럼 UI -----
   /** 파일 로드 후 컬럼 목록으로 결측 허용 체크박스를 그린다(기본: 모두 해제). */
@@ -4275,6 +4393,13 @@ window.__download = Downloader;
   // ===== 실행 =====
   $("btnRun").addEventListener("click", async () => {
     if (!table) { showBanner("분석할 파일을 먼저 선택해 주세요."); return; }
+    // 분석 대상 컬럼이 하나도 선택되지 않은 경우 안내
+    {
+      const acAll = document.querySelectorAll("#analyzeColsList input.ac-col");
+      if (acAll.length && ![...acAll].some((el) => el.checked)) {
+        showBanner("분석 대상 컬럼을 1개 이상 선택해 주세요."); return;
+      }
+    }
     clearBanner();
     $("btnRun").disabled = true; $("btnRun").classList.add("hidden");
     $("btnCancel").classList.remove("hidden"); $("btnCancel").disabled = false;
