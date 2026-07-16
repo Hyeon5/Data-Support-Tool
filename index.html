@@ -759,14 +759,11 @@
         <label><input type="checkbox" id="cl_collapse" checked> 연속 공백 정리</label>
         <label><input type="checkbox" id="cl_tab" checked> Tab 문자 제거</label>
       </div>
-      <div class="clean-optgroup muted">기본 정제</div>
+      <div class="clean-optgroup muted">선택 옵션</div>
       <div class="grid-opts clean-opts">
         <label><input type="checkbox" id="cl_newline"> 줄바꿈 제거</label>
         <label><input type="checkbox" id="cl_fixtype"> 숫자/문자 형식 변환</label>
         <label><input type="checkbox" id="cl_invisible"> 보이지 않는 문자 제거</label>
-      </div>
-      <div class="clean-optgroup muted">선택 옵션</div>
-      <div class="grid-opts clean-opts">
         <label><input type="checkbox" id="cl_expexp"> 지수(E)표기 복원</label>
         <label><input type="checkbox" id="cl_thousep"> 천 단위 구분기호(,) 제거</label>
         <label><input type="checkbox" id="cl_allspecial"> 모든 특수문자 제거</label>
@@ -2448,6 +2445,7 @@ function detectTables(grid) {
         cnt++; if (!hasNum && isNumLike(v)) hasNum = true;
       }
       if (cnt === 0) return 0;
+      if (cnt === 1) return 2;                 // 1개 열에만 값(여러 행 가능) = 표 밑 텍스트/주석으로 간주(숫자여도)
       if (hasNum) return 1;
       return cnt > textLimit ? 3 : 2;
     };
@@ -5766,8 +5764,8 @@ window.__infoTooltip = InfoTooltip;
     // 파일 바이트는 실제로 필요한 분기에서만 읽는다(loadWorkbook 경로와의 이중 읽기 방지 → 메모리 절감)
 
     if (mode === "xlsx2xlsx") {
-      if (ext === "xls") {   // 구형 xls 는 원본 서식 유지 대상이 아니므로 정제 후 xlsx 로 저장
-        const wb0 = await A.loadWorkbook(file);
+      if (ext === "xls") {   // 구형 xls 는 원본 서식 유지 대상이 아니므로 정제 후 xlsx 로 저장(표 인식 적용)
+        const wb0 = await A.loadWorkbook(file, null, { tables: true });
         const agg = A.DataCleaner.makeContext();
         const sheetsOut = [];
         for (let i = 0; i < wb0.sheets.length; i++) {
@@ -5788,7 +5786,8 @@ window.__infoTooltip = InfoTooltip;
       return { outputs: [{ name: base + ".xlsx", data: res.bytes, kind: "xlsx" }], summary: res.summary };
     }
     if (mode === "xlsx2csv") {
-      const wb = await A.loadWorkbook(file);
+      // 표 인식 모드: 시트 내 표가 2개 이상이면 '{시트}_표N' 엔트리로 나눠 CSV 를 각각 출력(표 밖 텍스트 제외)
+      const wb = await A.loadWorkbook(file, null, { tables: true });
       const agg = A.DataCleaner.makeContext(); const outs = [];
       const multi = wb.sheets.length > 1;
       for (let i = 0; i < wb.sheets.length; i++) {
@@ -5808,14 +5807,22 @@ window.__infoTooltip = InfoTooltip;
       const buf = new Uint8Array(await file.arrayBuffer());
       const grid = await A.CsvReader.readGrid(buf, (pct) => prog({ phase: "read", percent: pct }), forcedIn);
       prog({ phase: "convert", sheetIndex: 0, sheetCount: 1, sheetName: "(파일 전체)", rowsDone: grid.length, rowsTotal: grid.length });
-      const t = window.__readers.gridToTable(grid);
-      const c = A.DataCleaner.cleanTable(t.columns, t.rows, opts);
-      c.summary.sheetCount = 1;
-      await yieldUi();
-      if (mode === "csv2csv")
-        return { outputs: [{ name: base + ".csv", data: A.CsvWriter.toBytes(c.columns, c.rows, { bom: bomOut }), kind: "csv" }], summary: c.summary };
-      const bytes = A.XlsxWriter.buildWorkbook([{ name: "Sheet1", columns: c.columns, rows: c.rows, fillSlots: null }]);
-      return { outputs: [{ name: base + ".xlsx", data: bytes, kind: "xlsx" }], summary: c.summary };
+      // 표 인식: 표가 2개 이상이면 '표N' 으로 나눠 각각 출력(표 밖 텍스트 제외)
+      const dts = window.__readers.detectTables(grid);
+      const tables = dts.length ? dts : [window.__readers.gridToTable(grid)];
+      const agg = A.DataCleaner.makeContext(); const outs = []; const sheetsOut = [];
+      const multiT = tables.length > 1;
+      for (let ti = 0; ti < tables.length; ti++) {
+        const c = A.DataCleaner.cleanTable(tables[ti].columns, tables[ti].rows, opts);
+        mergeCtx(agg, c.summary);
+        if (mode === "csv2csv")
+          outs.push({ name: (multiT ? base + "_표" + (ti + 1) : base) + ".csv", data: A.CsvWriter.toBytes(c.columns, c.rows, { bom: bomOut }), kind: "csv" });
+        else sheetsOut.push({ name: multiT ? "표" + (ti + 1) : "Sheet1", columns: c.columns, rows: c.rows, fillSlots: null });
+        await yieldUi();
+      }
+      agg.sheetCount = tables.length;
+      if (mode === "csv2csv") return { outputs: outs, summary: agg };
+      return { outputs: [{ name: base + ".xlsx", data: A.XlsxWriter.buildWorkbook(sheetsOut), kind: "xlsx" }], summary: agg };
     }
     throw new Error("알 수 없는 변환 방식");
   }
