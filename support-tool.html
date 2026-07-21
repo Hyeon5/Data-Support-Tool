@@ -306,6 +306,10 @@
 
   /* ===== 좌측 사이드바 하단: 화면 테마 토글(라이트/다크) ===== */
   :root{ color-scheme:light; }
+  /* Lucide 인라인 SVG 아이콘(lucide.dev · ISC License) — 이모지 대체, currentColor 로 테마 색상 연동 */
+  svg.lucide{ display:inline-block; vertical-align:-0.15em; }
+  .dash-head svg.lucide{ vertical-align:-3px; margin-right:2px; }
+  .rail-btn .ico svg.lucide, .theme-btn .tico svg.lucide{ vertical-align:middle; }
   .theme-switch{ margin-top:auto; padding:12px; border-top:1px solid var(--line); flex:0 0 auto; }
   .theme-switch-title{ display:block; font-size:11px; font-weight:700; color:var(--muted);
     margin:0 2px 7px; letter-spacing:.2px; text-align:center; }
@@ -387,26 +391,26 @@
   <!-- C-2: 좌측 레일(데스크톱) -->
   <nav class="rail" id="modeRail" aria-label="분석 모드 선택">
     <button type="button" class="rail-btn active" id="railSingle" role="tab" aria-selected="true">
-      <span class="ico" aria-hidden="true">📄</span><span class="lbl">단일 파일 분석</span>
+      <span class="ico" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg></span><span class="lbl">단일 파일 분석</span>
     </button>
     <button type="button" class="rail-btn" id="railCompare" role="tab" aria-selected="false">
-      <span class="ico" aria-hidden="true">🔀</span><span class="lbl">비교 검증</span>
+      <span class="ico" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg></span><span class="lbl">비교 검증</span>
     </button>
     <button type="button" class="rail-btn" id="railDeid" role="tab" aria-selected="false">
-      <span class="ico" aria-hidden="true">🛡️</span><span class="lbl">개인정보 비식별</span>
+      <span class="ico" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span><span class="lbl">개인정보 비식별</span>
     </button>
     <button type="button" class="rail-btn" id="railClean" role="tab" aria-selected="false">
-      <span class="ico" aria-hidden="true">🧹</span><span class="lbl">정제·형식 변환</span>
+      <span class="ico" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg></span><span class="lbl">정제·형식 변환</span>
     </button>
     <!-- 좌측 사이드바 하단: 화면 테마(라이트/다크) 선택 -->
     <div class="theme-switch" role="group" aria-label="화면 테마 선택">
       <span class="theme-switch-title">화면 테마</span>
       <div class="theme-switch-btns">
         <button type="button" class="theme-btn active" id="themeLight" aria-pressed="true" title="라이트(밝은) 테마">
-          <span class="tico" aria-hidden="true">☀️</span><span class="tlbl">라이트</span>
+          <span class="tico" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span><span class="tlbl">라이트</span>
         </button>
         <button type="button" class="theme-btn" id="themeDark" aria-pressed="false" title="다크(어두운) 테마">
-          <span class="tico" aria-hidden="true">🌙</span><span class="tlbl">다크</span>
+          <span class="tico" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span><span class="tlbl">다크</span>
         </button>
       </div>
       <div class="rail-version muted">V1.1</div>
@@ -437,7 +441,7 @@
     <!-- Drag & Drop 업로드 영역 -->
     <div id="dropZone" class="dropzone" tabindex="0" role="button"
          aria-label="파일 업로드 영역. CSV 또는 XLSX 파일을 드래그하여 놓거나 클릭하여 업로드합니다.">
-      <div class="dz-icon" aria-hidden="true">⬆</div>
+      <div class="dz-icon" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></div>
       <div class="dz-text" id="dzText">CSV 또는 XLSX 파일을 여기에 드래그하거나 클릭하여 업로드</div>
       <div class="dz-sub muted" id="dzSub">허용 형식: .csv, .xlsx (구형 .xls 도 지원) · 최대 50MB</div>
       <button type="button" id="dzClear" class="dz-clear hidden" aria-label="선택한 파일 제거">✕ 파일 제거</button>
@@ -680,7 +684,7 @@
         모든 처리는 브라우저 안에서만 수행됩니다.</p>
       <div class="dropzone" id="dzDeid" tabindex="0" role="button"
            aria-label="비식별 대상 파일 업로드 영역. CSV 또는 XLSX 파일을 드래그하거나 클릭하여 업로드합니다.">
-        <div class="dz-icon" aria-hidden="true">⬆</div>
+        <div class="dz-icon" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></div>
         <div class="dz-text" id="dzDeidText">CSV 또는 XLSX 파일을 여기에 드래그하거나 클릭하여 업로드</div>
         <div class="dz-sub muted">허용 형식: .csv, .xlsx (구형 .xls 도 지원) · 최대 50MB</div>
         <button type="button" id="dzDeidClear" class="dz-clear hidden" aria-label="선택한 파일 제거">✕ 파일 제거</button>
@@ -761,7 +765,7 @@
       <h2><span class="badge">2</span> 파일 선택 (다중 업로드)</h2>
       <div class="dropzone" id="dzClean" tabindex="0" role="button"
            aria-label="파일 업로드 영역. 여러 파일을 드래그하거나 클릭하여 선택합니다.">
-        <div class="dz-icon" aria-hidden="true">⬆</div>
+        <div class="dz-icon" aria-hidden="true"><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg></div>
         <div class="dz-text" id="dzCleanText">여기에 여러 파일을 드래그하거나 클릭하여 선택</div>
         <div class="dz-sub muted" id="dzCleanSub">최대 30개 · 총 300MB · 선택한 변환 방식의 원본 형식만 처리됩니다</div>
       </div>
@@ -4285,7 +4289,7 @@ window.__download = Downloader;
       : '<span class="muted">숫자 컬럼 없음</span>';
 
     $("dashboard").innerHTML =
-      '<div class="dash"><div class="dash-head" id="dashHead"><span>📊 분석 결과 요약' + approxBadge + '</span><span id="dashToggle">▼ 접기</span></div>' +
+      '<div class="dash"><div class="dash-head" id="dashHead"><span><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg> 분석 결과 요약' + approxBadge + '</span><span id="dashToggle">▼ 접기</span></div>' +
       '<div class="dash-body" id="dashBody">' +
       '<div class="dash-cards">' + card1 + card2 + card3 + card4 + "</div>" +
       '<div class="dash-viz">' +
@@ -5788,7 +5792,7 @@ window.__infoTooltip = InfoTooltip;
     plan.forEach((p) => { byMethod[p.method] = (byMethod[p.method] || 0) + 1; });
     const chips = Object.keys(byMethod).map((k) => esc(METHOD_LABEL[k]) + " " + byMethod[k] + "개").join(" · ") || "선택된 컬럼 없음";
     $("deidSummary").innerHTML =
-      '<div class="dash-head" style="cursor:default;"><span>🛡️ 비식별 처리 요약</span></div>' +
+      '<div class="dash-head" style="cursor:default;"><span><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg> 비식별 처리 요약</span></div>' +
       '<div class="dash-body"><div class="dash-cards">' +
       '<div class="dash-card"><h4>전체 컬럼</h4><div class="big">' + deidTable.columns.length + "</div></div>" +
       '<div class="dash-card"><h4>개인정보 추정</h4><div class="big">' + deidDetections.filter((d) => d.detected).length + "</div></div>" +
@@ -6126,7 +6130,7 @@ window.__infoTooltip = InfoTooltip;
 
   function renderResult(mode, opts, agg, okCount, outCount) {
     $("cleanSummary").innerHTML =
-      '<div class="dash-head" style="cursor:default;"><span>🧹 정제·변환 요약</span></div>' +
+      '<div class="dash-head" style="cursor:default;"><span><svg class="lucide" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg> 정제·변환 요약</span></div>' +
       '<div class="dash-body"><div class="dash-cards">' +
       '<div class="dash-card"><h4>변환 방식</h4><div class="big" style="font-size:16px">' + MODE_LABEL[mode] + "</div></div>" +
       '<div class="dash-card"><h4>성공 / 전체</h4><div class="big">' + okCount + " / " + files.length + "</div><div class=\"sub\">생성 파일 " + outCount + "개 · 시트 " + (agg.sheetCount || 0) + "개</div></div>" +
