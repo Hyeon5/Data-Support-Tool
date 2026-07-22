@@ -146,8 +146,12 @@
     font-family:Georgia,"Times New Roman",serif; line-height:1;
     cursor:help; vertical-align:middle;
   }
+  /* hover: 진한 파랑 대신 연한 하늘색 색조(시안 1) — 라이트/다크 각각 */
   .info-icon:hover, .info-icon:focus-visible{
-    color:var(--accent); border-color:var(--accent); outline:none;
+    color:#4da3f0; border-color:#9ecdf7; background:#eaf4fe; outline:none;
+  }
+  [data-theme="dark"] .info-icon:hover, [data-theme="dark"] .info-icon:focus-visible{
+    color:#7dd3fc; border-color:#4f7ca8; background:#16283e;
   }
   .param label{ display:inline-flex; align-items:center; }
   .info-tooltip{
